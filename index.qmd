@@ -214,7 +214,7 @@ od_data |>
   plot_data(Delta_OD, ylab = "Delta OD600 nm")
 ```
 
-## Logistic growth model
+## Model
 
 The logistic growth model:
 
@@ -228,7 +228,7 @@ A reparameterization of the gamma density of probability:
 
 ```{r}
 dgamma2 <- function(x, mu, k) {
-  dgamma(x, k, k / mu, log = TRUE)
+  suppressWarnings(dgamma(x, k, k / mu, log = TRUE))
 }
 ```
 
@@ -236,7 +236,7 @@ A reparameterization of the log-normal density of probability:
 
 ```{r}
 dlnorm2 <- function(x, mu, k) {
-  dlnorm(x, log(mu), k, log = TRUE)
+  suppressWarnings(dlnorm(x, log(mu), k, log = TRUE))
 }
 ```
 
@@ -284,7 +284,7 @@ mle3 <- function(x, f, k = 10, ...) {
 
 An example using a gamma distribution:
 
-```{r warning = FALSE}
+```{r}
 od_data |> 
   filter(Sample == "W", Medium == "M9", replicate == 1, time < 15 * 60) |> 
   mle3(dgamma2)
@@ -292,13 +292,76 @@ od_data |>
 
 An example using a log-normal distribution:
 
-```{r warning = FALSE}
+```{r}
 od_data |> 
   filter(Sample == "W", Medium == "M9", replicate == 1, time < 15 * 60) |> 
   mle3(dlnorm2)
 ```
 
 ```{r}
-
+M9_medium <- od_data |> 
+  filter(Medium == "M9", time < 15 * 60)
 ```
+
+```{r}
+M9_medium_gamma <- M9_medium |> 
+  group_by(Sample, replicate) |> 
+  group_split() |> 
+  map(mle3, dgamma2)
+```
+
+```{r}
+convergence <- function(x) x@details$convergence
+```
+
+```{r}
+map_int(M9_medium_gamma, convergence)
+```
+
+```{r}
+confint2 <- function(x) {
+  spline_method <- confint(x) # , maxsteps = 1e4)
+  quadra_method <- confint(x, method = "quad")
+  
+  if (any(is.na(spline_method))) {
+    method <- spline_method |> 
+      rowSums() |> 
+      is.na() |> 
+      add(1) |> 
+      (\(x) c("spline", "quadra")[x])()
+    
+    indices <- spline_method |> 
+      is.na() |> 
+      which()
+    
+    spline_method[indices] <- quadra_method[indices]
+  } else {
+    method <- "spline"
+  }
+  
+  spline_method |> 
+    as_tibble() |> 
+    mutate(method = method)
+}
+
+confint2(M9_medium_gamma[[1]])
+```
+
+```{r}
+vcov(M9_medium_gamma[[1]])
+eigen(vcov(M9_medium_gamma[[1]]))$values
+```
+
+
+```{r}
+p <- profile(M9_medium_gamma[[1]])
+plot(p)
+```
+
+
+
+
+
+
+
 
