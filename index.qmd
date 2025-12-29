@@ -94,6 +94,7 @@ library(tidyr)
 library(dplyr)
 library(purrr)
 library(magrittr)
+library(bbmle)
 ```
 
 
@@ -171,24 +172,133 @@ unique(nb_rep$n)
 
 ## Plots
 
+Setting the colors:
+
 ```{r}
 col_set <- c("steelblue", "goldenrod")
 col_set_names <- unique_levels$Medium
 col_set_alpha <- col_set |>
   adjustcolor(.3) |> 
   setNames(col_set_names)
+```
 
-od_data |>
-  mutate(across(time, ~ divide_by(.x, 60))) |> 
-  slice_sample(prop = 1) |> 
-  with(plot(time, OD, col = col_set_alpha[Medium],
-            xlab = "time (hours)", ylab = "optical density OD600 nm"))
+A function that plots the data:
 
-legend("topleft", legend = col_set_names, pch = 1, bty = "n", col = col_set)
+```{r}
+plot_data <- function(x, y = OD, ylab = "optical density OD600 nm") {
+  x |>
+    mutate(across(time, ~ divide_by(.x, 60))) |> 
+    slice_sample(prop = 1) |> 
+    rename(y = {{ y }}) |> 
+    with(plot(time, y, col = col_set_alpha[Medium],
+              xlab = "time (hours)", ylab = ylab))
+  legend("topleft", legend = col_set_names, pch = 1, bty = "n", col = col_set)
+}
+```
+
+Plotting the OD values:
+
+```{r plot_OD_values}
+plot_data(od_data)
+abline(h = c(.1, .8))
+```
+
+Plotting the $\Delta$OD values:
+
+```{r plot_Delta_OD}
+od_data |> 
+  filter(time < 15 * 60, OD < .8) |> 
+  group_by(Sample, Medium, replicate) |> 
+  mutate(Delta_OD = c(NA, diff(OD))) |> 
+  ungroup() |> 
+  plot_data(Delta_OD, ylab = "Delta OD600 nm")
+```
+
+## Logistic growth model
+
+The logistic growth model:
+
+```{r}
+logistic <- function(t, K, r, t0) {
+  K / (1 + exp(-(t - t0) * r))
+}
+```
+
+A reparameterization of the gamma density of probability:
+
+```{r}
+dgamma2 <- function(x, mu, k) {
+  dgamma(x, k, k / mu, log = TRUE)
+}
+```
+
+A reparameterization of the log-normal density of probability:
+
+```{r}
+dlnorm2 <- function(x, mu, k) {
+  dlnorm(x, log(mu), k, log = TRUE)
+}
+```
+
+The minimum log-likelihood function factory:
+
+```{r}
+make_mLL <- function(x, f) {
+  function(K, r, t0, k) {
+    - sum(f(x$OD, logistic(x$time, K, r, t0), k))  
+  }
+}
+```
+
+A function that looks for good initial values for the parameters of the logistic growth
+model:
+
+```{r}
+ini_val <- function(df, k = 1) {
+  time <- df$time
+  K <- max(df$OD)
+  halfK <- K / 2
+  evaluate <- function(x) approx(time, df$OD, x)$y
+  distance <- function(x) abs(evaluate(x) - halfK)
+  t0 <- optimize(distance, range(time))$minimum
+  r <- df |> 
+    filter(time < t0) |> 
+    mutate(across(OD, log)) |> 
+    lm(OD ~ time, data = _) |> 
+    coef() |> 
+    extract(2) |> 
+    unname()
+  list(K = K, r = r, t0 = t0, k = k)
+}
+```
+
+A tuning of the `mle2()` function that includes the automatic initial values of the 
+parameters search and the specification of the density of probability we want to use
+for the minus log-likelihood function:
+
+```{r}
+mle3 <- function(x, f, k = 10, ...) {
+  mle2(make_mLL(x, f), ini_val(x, k), "Nelder-Mead", control = list(maxit = 1e4), ...)
+}
+```
+
+An example using a gamma distribution:
+
+```{r warning = FALSE}
+od_data |> 
+  filter(Sample == "W", Medium == "M9", replicate == 1, time < 15 * 60) |> 
+  mle3(dgamma2)
+```
+
+An example using a log-normal distribution:
+
+```{r warning = FALSE}
+od_data |> 
+  filter(Sample == "W", Medium == "M9", replicate == 1, time < 15 * 60) |> 
+  mle3(dlnorm2)
 ```
 
 ```{r}
-od_data |> 
-  filter(time < 15 * 60)
+
 ```
 
