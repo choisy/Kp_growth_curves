@@ -45,16 +45,31 @@ knitr::opts_chunk$set(margin1    = TRUE,
                       fig.width  = eps * 7) # default is 7 and maximum possible is 8.3
 ```
 
-The all code takes about 10' to run in parallel.
 
 ## Constants
 
-The folder that contains the data files:
+```{r}
+root <- paste0("/Users/", Sys.getenv("USER"), "/")
+```
+
+The mirrored folder:
 
 ```{r}
-path2data <- paste0("/Users/", Sys.getenv("USER"), "/Library/CloudStorage/",
+mirror_folder <- paste0(root, "GitHub/choisy/Kpneumoniae_plasmid/")
+```
+
+The root of the data folders:
+
+```{r}
+path2data <- paste0(root, "Library/CloudStorage/",
                     "OneDrive-OxfordUniversityClinicalResearchUnit/",
-                    "GitHub/choisy/Kp growth curves/")
+                    "GitHub/choisy/Kp_growth_curves/")
+```
+
+The name of the data file:
+
+```{r}
+data_file <- "CultureData_11523_Van.xlsx"
 ```
 
 ```{r include = FALSE}
@@ -62,6 +77,118 @@ path2cache <- paste0(path2data, "cache/")
 if (! dir.exists(path2cache)) dir.create(path2cache)
 make_path <- function(x) paste0(path2cache, x)
 file_exists <- function(x) file.exists(make_path(x))
-readRDS2 <- function(x) readRDS(make_path(x))
-saveRDS2 <- function(object, file) saveRDS(object, make_path(file))
+readRDScache <- function(x) readRDS(make_path(x))
+saveRDScache <- function(object, file) saveRDS(object, make_path(file))
 ```
+
+## Packages
+
+```{r}
+# stringr
+```
+
+
+```{r message = FALSE}
+library(readxl)
+library(tidyr)
+library(dplyr)
+library(purrr)
+library(magrittr)
+```
+
+
+## Functions
+
+## Data
+
+Mirroring the data set if not already done:
+
+```{r}
+data_file_full <- paste0(path2data, data_file)
+if (!file.exists(data_file_full))
+  file.copy(paste0(mirror_folder, data_file), data_file_full)
+```
+
+Loading the data:
+
+```{r}
+(od_data <- data_file_full |>
+  read_excel() |> 
+  group_by(Sample, Medium) |> 
+  mutate(replicate = row_number()) |>
+  ungroup() |> 
+  pivot_longer(- c(Sample, Medium, replicate), names_to = "time", values_to = "OD") |> 
+  mutate(across(time, ~ .x |>
+                  stringr::str_remove(" *h$") |> 
+                  as.numeric() |> 
+                  multiply_by(60) |> 
+                  round() |> 
+                  as.integer())))
+```
+
+Looking at the levels:
+
+```{r}
+(unique_levels <- od_data |> 
+  select(-OD) |> 
+  map(~ sort(unique(.x))))
+```
+
+Checking the regularity of time measurements:
+
+```{r}
+unique(diff(unique_levels$time))
+```
+
+The number of combinations:
+
+```{r}
+unique_levels |> 
+  map_int(length) |> 
+  reduce(`*`)
+```
+
+Number of replicates per combination:
+
+```{r}
+(nb_rep <- od_data |> 
+  group_by(Sample, Medium, time) |> 
+  tally())
+```
+
+Checking that we have all the combinations:
+
+```{r}
+nrow(nb_rep)
+```
+
+Looking at the number of replicates per combination:
+
+```{r}
+unique(nb_rep$n)
+```
+
+
+## Plots
+
+```{r}
+col_set <- c("steelblue", "goldenrod")
+col_set_names <- unique_levels$Medium
+col_set_alpha <- col_set |>
+  adjustcolor(.3) |> 
+  setNames(col_set_names)
+
+od_data |>
+  mutate(across(time, ~ divide_by(.x, 60))) |> 
+  slice_sample(prop = 1) |> 
+  with(plot(time, OD, col = col_set_alpha[Medium],
+            xlab = "time (hours)", ylab = "optical density OD600 nm"))
+
+legend("topleft", legend = col_set_names, pch = 1, bty = "n", col = col_set)
+```
+
+```{r}
+od_data |> 
+  filter(time < 15 * 60)
+```
+
