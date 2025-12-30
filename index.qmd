@@ -228,7 +228,7 @@ A reparameterization of the gamma density of probability:
 
 ```{r}
 dgamma2 <- function(x, mu, k) {
-  suppressWarnings(dgamma(x, k, k / mu, log = TRUE))
+    dgamma(x, k, k / mu, log = TRUE)
 }
 ```
 
@@ -236,7 +236,7 @@ A reparameterization of the log-normal density of probability:
 
 ```{r}
 dlnorm2 <- function(x, mu, k) {
-  suppressWarnings(dlnorm(x, log(mu), k, log = TRUE))
+    dlnorm(x, log(mu), k, log = TRUE)
 }
 ```
 
@@ -245,7 +245,7 @@ The minimum log-likelihood function factory:
 ```{r}
 make_mLL <- function(x, f) {
   function(K, r, t0, k) {
-    - sum(f(x$OD, logistic(x$time, K, r, t0), k))  
+    - sum(f(x$OD, logistic(x$time, exp(K), exp(r), exp(t0)), exp(k)))  
   }
 }
 ```
@@ -268,7 +268,7 @@ ini_val <- function(df, k = 1) {
     coef() |> 
     extract(2) |> 
     unname()
-  list(K = K, r = r, t0 = t0, k = k)
+  as.list(log(c(K = K, r = r, t0 = t0, k = k)))
 }
 ```
 
@@ -298,10 +298,14 @@ od_data |>
   mle3(dlnorm2)
 ```
 
+The data from the M9 medium:
+
 ```{r}
 M9_medium <- od_data |> 
   filter(Medium == "M9", time < 15 * 60)
 ```
+
+Fitting these data with a gamma likelihood:
 
 ```{r}
 M9_medium_gamma <- M9_medium |> 
@@ -310,56 +314,17 @@ M9_medium_gamma <- M9_medium |>
   map(mle3, dgamma2)
 ```
 
+A function that checks the convergence status of a fitted model:
+
 ```{r}
 convergence <- function(x) x@details$convergence
 ```
 
+Checking convergence from all the fitted models:
+
 ```{r}
 map_int(M9_medium_gamma, convergence)
 ```
-
-```{r}
-confint2 <- function(x) {
-  spline_method <- confint(x) # , maxsteps = 1e4)
-  quadra_method <- confint(x, method = "quad")
-  
-  if (any(is.na(spline_method))) {
-    method <- spline_method |> 
-      rowSums() |> 
-      is.na() |> 
-      add(1) |> 
-      (\(x) c("spline", "quadra")[x])()
-    
-    indices <- spline_method |> 
-      is.na() |> 
-      which()
-    
-    spline_method[indices] <- quadra_method[indices]
-  } else {
-    method <- "spline"
-  }
-  
-  spline_method |> 
-    as_tibble() |> 
-    mutate(method = method)
-}
-
-confint2(M9_medium_gamma[[1]])
-```
-
-```{r}
-vcov(M9_medium_gamma[[1]])
-eigen(vcov(M9_medium_gamma[[1]]))$values
-```
-
-
-```{r}
-p <- profile(M9_medium_gamma[[1]])
-plot(p)
-```
-
-
-
 
 
 
