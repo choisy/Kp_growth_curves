@@ -95,6 +95,7 @@ library(dplyr)
 library(purrr)
 library(magrittr)
 library(bbmle)
+library(tibble)
 ```
 
 
@@ -214,7 +215,7 @@ od_data |>
   plot_data(Delta_OD, ylab = "Delta OD600 nm")
 ```
 
-## Model
+## Models
 
 The logistic growth model:
 
@@ -282,14 +283,6 @@ mle3 <- function(x, f, k = 10, ...) {
 }
 ```
 
-An example using a gamma distribution:
-
-```{r}
-od_data |> 
-  filter(Sample == "W", Medium == "M9", replicate == 1, time < 15 * 60) |> 
-  mle3(dgamma2)
-```
-
 An example using a log-normal distribution:
 
 ```{r}
@@ -298,35 +291,61 @@ od_data |>
   mle3(dlnorm2)
 ```
 
-The data from the M9 medium:
+
+## Batches
+
+A function that fits a model on all the replicates of a data frame:
 
 ```{r}
-M9_medium <- od_data |> 
-  filter(Medium == "M9", time < 15 * 60)
+fit_by_replicate <- function(x, f) {
+  list(fitted_models = x |> 
+         group_by(Sample, replicate) |> 
+         group_split() |> 
+         map(mle3, f),
+       data = x)
+}
 ```
 
-Fitting these data with a gamma likelihood:
+Fitting a log-normal likelihood to the replicates from the M9 medium:
 
 ```{r}
-M9_medium_gamma <- M9_medium |> 
-  group_by(Sample, replicate) |> 
-  group_split() |> 
-  map(mle3, dgamma2)
+M9_medium_lnorm <- od_data |> 
+  filter(Medium == "M9", time < 15 * 60) |>
+  fit_by_replicate(dlnorm2)
 ```
 
-A function that checks the convergence status of a fitted model:
+A function that extracts the convergence status of a fitted model:
 
 ```{r}
 convergence <- function(x) x@details$convergence
 ```
 
-Checking convergence from all the fitted models:
+Checking the convergence from all the fitted models:
 
 ```{r}
-map_int(M9_medium_gamma, convergence)
+any(map_int(M9_medium_lnorm$fitted_models, convergence) > 0)
 ```
 
+A function that summarizes the fits of an output from `fit_by_replicate()`:
 
+```{r}
+fit_summary <- function(x) {
+  fits <- x$fitted_models
+  bind_cols(x$data |> 
+              select(-time, -OD) |> 
+              unique(),
+            map_dfr(fits, ~ as_tibble_row(exp(coef(.x)))),
+            map_dfr(fits, ~ tibble(LL = as.numeric(logLik(.x)))))
+}
+```
 
+Looking at the summary of the fits on the replicates from M9 medium using a log-normal
+likelihood:
+
+```{r}
+M9_medium_lnorm |>
+  fit_summary() |> 
+  print(n = Inf)
+```
 
 
