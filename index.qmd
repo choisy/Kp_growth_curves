@@ -48,6 +48,8 @@ knitr::opts_chunk$set(margin1    = TRUE,
 
 ## Constants
 
+The files root:
+
 ```{r}
 root <- paste0("/Users/", Sys.getenv("USER"), "/")
 ```
@@ -314,18 +316,6 @@ M9_medium_lnorm <- od_data |>
   fit_by_replicate(dlnorm2)
 ```
 
-A function that extracts the convergence status of a fitted model:
-
-```{r}
-convergence <- function(x) x@details$convergence
-```
-
-Checking the convergence from all the fitted models:
-
-```{r}
-any(map_int(M9_medium_lnorm$fitted_models, convergence) > 0)
-```
-
 A function that summarizes the fits of an output from `fit_by_replicate()`:
 
 ```{r}
@@ -335,7 +325,8 @@ fit_summary <- function(x) {
               select(-time, -OD) |> 
               unique(),
             map_dfr(fits, ~ as_tibble_row(exp(coef(.x)))),
-            map_dfr(fits, ~ tibble(LL = as.numeric(logLik(.x)))))
+            map_dfr(fits, ~ tibble(LL = as.numeric(logLik(.x)))),
+            map_dfr(fits, ~ tibble(conv = .x@details$convergence)))
 }
 ```
 

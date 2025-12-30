@@ -143,6 +143,7 @@ window.Quarto = {
 
 <section id="constants" class="level2" data-number="1">
 <h2 data-number="1" class="anchored" data-anchor-id="constants"><span class="header-section-number">1</span> Constants</h2>
+<p>The files root:</p>
 <div class="cell" data-layout-align="center">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>root <span class="ot">&lt;-</span> <span class="fu">paste0</span>(<span class="st">"/Users/"</span>, <span class="fu">Sys.getenv</span>(<span class="st">"USER"</span>), <span class="st">"/"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
@@ -437,67 +438,57 @@ Log-likelihood: 83.98 </code></pre>
 <span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(Medium <span class="sc">==</span> <span class="st">"M9"</span>, time <span class="sc">&lt;</span> <span class="dv">15</span> <span class="sc">*</span> <span class="dv">60</span>) <span class="sc">|&gt;</span></span>
 <span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">fit_by_replicate</span>(dlnorm2)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
-<p>A function that extracts the convergence status of a fitted model:</p>
-<div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb36"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>convergence <span class="ot">&lt;-</span> <span class="cf">function</span>(x) x<span class="sc">@</span>details<span class="sc">$</span>convergence</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</div>
-<p>Checking the convergence from all the fitted models:</p>
-<div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb37"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="fu">any</span>(<span class="fu">map_int</span>(M9_medium_lnorm<span class="sc">$</span>fitted_models, convergence) <span class="sc">&gt;</span> <span class="dv">0</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stdout">
-<pre><code>[1] FALSE</code></pre>
-</div>
-</div>
 <p>A function that summarizes the fits of an output from <code>fit_by_replicate()</code>:</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb39"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>fit_summary <span class="ot">&lt;-</span> <span class="cf">function</span>(x) {</span>
-<span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a>  fits <span class="ot">&lt;-</span> x<span class="sc">$</span>fitted_models</span>
-<span id="cb39-3"><a href="#cb39-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bind_cols</span>(x<span class="sc">$</span>data <span class="sc">|&gt;</span> </span>
-<span id="cb39-4"><a href="#cb39-4" aria-hidden="true" tabindex="-1"></a>              <span class="fu">select</span>(<span class="sc">-</span>time, <span class="sc">-</span>OD) <span class="sc">|&gt;</span> </span>
-<span id="cb39-5"><a href="#cb39-5" aria-hidden="true" tabindex="-1"></a>              <span class="fu">unique</span>(),</span>
-<span id="cb39-6"><a href="#cb39-6" aria-hidden="true" tabindex="-1"></a>            <span class="fu">map_dfr</span>(fits, <span class="sc">~</span> <span class="fu">as_tibble_row</span>(<span class="fu">exp</span>(<span class="fu">coef</span>(.x)))),</span>
-<span id="cb39-7"><a href="#cb39-7" aria-hidden="true" tabindex="-1"></a>            <span class="fu">map_dfr</span>(fits, <span class="sc">~</span> <span class="fu">tibble</span>(<span class="at">LL =</span> <span class="fu">as.numeric</span>(<span class="fu">logLik</span>(.x)))))</span>
-<span id="cb39-8"><a href="#cb39-8" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb36"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>fit_summary <span class="ot">&lt;-</span> <span class="cf">function</span>(x) {</span>
+<span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a>  fits <span class="ot">&lt;-</span> x<span class="sc">$</span>fitted_models</span>
+<span id="cb36-3"><a href="#cb36-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bind_cols</span>(x<span class="sc">$</span>data <span class="sc">|&gt;</span> </span>
+<span id="cb36-4"><a href="#cb36-4" aria-hidden="true" tabindex="-1"></a>              <span class="fu">select</span>(<span class="sc">-</span>time, <span class="sc">-</span>OD) <span class="sc">|&gt;</span> </span>
+<span id="cb36-5"><a href="#cb36-5" aria-hidden="true" tabindex="-1"></a>              <span class="fu">unique</span>(),</span>
+<span id="cb36-6"><a href="#cb36-6" aria-hidden="true" tabindex="-1"></a>            <span class="fu">map_dfr</span>(fits, <span class="sc">~</span> <span class="fu">as_tibble_row</span>(<span class="fu">exp</span>(<span class="fu">coef</span>(.x)))),</span>
+<span id="cb36-7"><a href="#cb36-7" aria-hidden="true" tabindex="-1"></a>            <span class="fu">map_dfr</span>(fits, <span class="sc">~</span> <span class="fu">tibble</span>(<span class="at">LL =</span> <span class="fu">as.numeric</span>(<span class="fu">logLik</span>(.x)))),</span>
+<span id="cb36-8"><a href="#cb36-8" aria-hidden="true" tabindex="-1"></a>            <span class="fu">map_dfr</span>(fits, <span class="sc">~</span> <span class="fu">tibble</span>(<span class="at">conv =</span> .x<span class="sc">@</span>details<span class="sc">$</span>convergence)))</span>
+<span id="cb36-9"><a href="#cb36-9" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>Looking at the summary of the fits on the replicates from M9 medium using a log-normal likelihood:</p>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb40"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>M9_medium_lnorm <span class="sc">|&gt;</span></span>
-<span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">fit_summary</span>() <span class="sc">|&gt;</span> </span>
-<span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">print</span>(<span class="at">n =</span> <span class="cn">Inf</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb37"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a>M9_medium_lnorm <span class="sc">|&gt;</span></span>
+<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">fit_summary</span>() <span class="sc">|&gt;</span> </span>
+<span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">print</span>(<span class="at">n =</span> <span class="cn">Inf</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 30 × 8
-   Sample Medium replicate     K       r    t0     k    LL
-   &lt;chr&gt;  &lt;chr&gt;      &lt;int&gt; &lt;dbl&gt;   &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
- 1 W      M9             1 0.527 0.00592  379. 0.186  84.0
- 2 W      M9             2 0.606 0.00618  404. 0.211  74.9
- 3 W      M9             3 0.605 0.00631  396. 0.212  73.9
- 4 W      M9             4 0.650 0.00645  399. 0.217  70.0
- 5 W      M9             5 0.653 0.00650  399. 0.219  69.4
- 6 W      M9             6 0.605 0.00632  395. 0.211  74.1
- 7 WE     M9             1 0.603 0.00541  452. 0.205  80.7
- 8 WE     M9             2 0.637 0.00557  456. 0.216  76.5
- 9 WE     M9             3 0.648 0.00561  452. 0.221  74.1
-10 WE     M9             4 0.651 0.00564  452. 0.222  73.9
-11 WE     M9             5 0.655 0.00558  459. 0.215  75.9
-12 WE     M9             6 0.663 0.00571  455. 0.225  72.7
-13 WH     M9             1 0.567 0.00583  408. 0.222  75.2
-14 WH     M9             2 0.584 0.00592  417. 0.231  73.0
-15 WH     M9             3 0.629 0.00583  435. 0.230  72.1
-16 WH     M9             4 0.626 0.00586  431. 0.231  71.6
-17 WH     M9             5 0.627 0.00599  426. 0.229  71.5
-18 WH     M9             6 0.634 0.00594  430. 0.234  70.4
-19 WV     M9             1 0.666 0.00470  538. 0.193  87.1
-20 WV     M9             2 0.712 0.00495  532. 0.205  81.4
-21 WV     M9             3 0.736 0.00495  539. 0.213  78.9
-22 WV     M9             4 0.746 0.00499  538. 0.213  78.4
-23 WV     M9             5 0.742 0.00526  514. 0.211  77.1
-24 WV     M9             6 0.740 0.00521  520. 0.215  76.8
-25 WVE    M9             1 0.778 0.00445  605. 0.200  85.2
-26 WVE    M9             2 0.855 0.00461  616. 0.209  81.0
-27 WVE    M9             3 0.834 0.00475  591. 0.210  79.5
-28 WVE    M9             4 0.825 0.00457  607. 0.204  82.5
-29 WVE    M9             5 0.809 0.00466  594. 0.204  82.2
-30 WVE    M9             6 0.812 0.00477  581. 0.203  81.3</code></pre>
+<pre><code># A tibble: 30 × 9
+   Sample Medium replicate     K       r    t0     k    LL  conv
+   &lt;chr&gt;  &lt;chr&gt;      &lt;int&gt; &lt;dbl&gt;   &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;int&gt;
+ 1 W      M9             1 0.527 0.00592  379. 0.186  84.0     0
+ 2 W      M9             2 0.606 0.00618  404. 0.211  74.9     0
+ 3 W      M9             3 0.605 0.00631  396. 0.212  73.9     0
+ 4 W      M9             4 0.650 0.00645  399. 0.217  70.0     0
+ 5 W      M9             5 0.653 0.00650  399. 0.219  69.4     0
+ 6 W      M9             6 0.605 0.00632  395. 0.211  74.1     0
+ 7 WE     M9             1 0.603 0.00541  452. 0.205  80.7     0
+ 8 WE     M9             2 0.637 0.00557  456. 0.216  76.5     0
+ 9 WE     M9             3 0.648 0.00561  452. 0.221  74.1     0
+10 WE     M9             4 0.651 0.00564  452. 0.222  73.9     0
+11 WE     M9             5 0.655 0.00558  459. 0.215  75.9     0
+12 WE     M9             6 0.663 0.00571  455. 0.225  72.7     0
+13 WH     M9             1 0.567 0.00583  408. 0.222  75.2     0
+14 WH     M9             2 0.584 0.00592  417. 0.231  73.0     0
+15 WH     M9             3 0.629 0.00583  435. 0.230  72.1     0
+16 WH     M9             4 0.626 0.00586  431. 0.231  71.6     0
+17 WH     M9             5 0.627 0.00599  426. 0.229  71.5     0
+18 WH     M9             6 0.634 0.00594  430. 0.234  70.4     0
+19 WV     M9             1 0.666 0.00470  538. 0.193  87.1     0
+20 WV     M9             2 0.712 0.00495  532. 0.205  81.4     0
+21 WV     M9             3 0.736 0.00495  539. 0.213  78.9     0
+22 WV     M9             4 0.746 0.00499  538. 0.213  78.4     0
+23 WV     M9             5 0.742 0.00526  514. 0.211  77.1     0
+24 WV     M9             6 0.740 0.00521  520. 0.215  76.8     0
+25 WVE    M9             1 0.778 0.00445  605. 0.200  85.2     0
+26 WVE    M9             2 0.855 0.00461  616. 0.209  81.0     0
+27 WVE    M9             3 0.834 0.00475  591. 0.210  79.5     0
+28 WVE    M9             4 0.825 0.00457  607. 0.204  82.5     0
+29 WVE    M9             5 0.809 0.00466  594. 0.204  82.2     0
+30 WVE    M9             6 0.812 0.00477  581. 0.203  81.3     0</code></pre>
 </div>
 </div>
 </section>
