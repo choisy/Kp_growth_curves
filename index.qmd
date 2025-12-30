@@ -83,6 +83,7 @@ readRDScache <- function(x) readRDS(make_path(x))
 saveRDScache <- function(object, file) saveRDS(object, make_path(file))
 ```
 
+
 ## Packages
 
 ```{r message = FALSE}
@@ -98,6 +99,21 @@ library(tibble)
 
 
 ## Functions
+
+A tuning of the `bbmle::coef()` function:
+
+```{r}
+coef2 <- function(x) exp(bbmle::coef(x))
+```
+
+A tuning of the `plot()` function:
+
+```{r}
+plot_od <- function(..., ylab = "optical density OD600 nm") {
+  plot(..., xlab = "time (hours)", ylab = ylab)
+}
+```
+
 
 ## Data
 
@@ -184,13 +200,12 @@ col_set_alpha <- col_set |>
 A function that plots the data:
 
 ```{r}
-plot_data <- function(x, y = OD, ylab = "optical density OD600 nm") {
+plot_data <- function(x, y = OD, ...) {
   x |>
     mutate(across(time, ~ divide_by(.x, 60))) |> 
     slice_sample(prop = 1) |> 
     rename(y = {{ y }}) |> 
-    with(plot(time, y, col = col_set_alpha[Medium],
-              xlab = "time (hours)", ylab = ylab))
+    with(plot_od(time, y, col = col_set_alpha[Medium], ...))
   legend("topleft", legend = col_set_names, pch = 1, bty = "n", col = col_set)
 }
 ```
@@ -199,7 +214,7 @@ Plotting the OD values:
 
 ```{r plot_OD_values}
 plot_data(od_data)
-abline(h = c(.1, .8))
+abline(h = c(.1, .5, .6, .8))
 ```
 
 Plotting the $\Delta$OD values:
@@ -213,9 +228,8 @@ od_data |>
   plot_data(Delta_OD, ylab = "Delta OD600 nm")
 ```
 
-## Models
 
-### Distributions
+## Probability distributions
 
 A function that adds metadata to a function:
 
@@ -227,11 +241,32 @@ add_metadata <- function(f, name, q) {
 }
 ```
 
+
+### Normal
+
+A reparameterization of `qlnorm()`:
+
+```{r}
+qnorm2 <- function(x, mu, k, ...) {
+  qnorm(x, mu, k, ...)
+}
+```
+
+A reparameterization of `dlnorm()`:
+
+```{r}
+dnorm2 <- add_metadata(function(x, mu, k) dnorm(x, mu, k, log = TRUE),
+                       "norm", qnorm2)
+```
+
+
+### Gamma
+
 A reparameterization of `qgamma()`:
 
 ```{r}
 qgamma2 <- function(x, mu, k, ...) {
-    qgamma(x, k, k / mu, ...)
+  qgamma(x, k, k / mu, ...)
 }
 ```
 
@@ -242,21 +277,26 @@ dgamma2 <- add_metadata(function(x, mu, k) dgamma(x, k, k / mu, log = TRUE),
                         "gamma", qgamma2)
 ```
 
+
+### Log-normal
+
 A reparameterization of `qlnorm()`:
 
 ```{r}
 qlnorm2 <- function(x, mu, k, ...) {
-    qlnorm(x, log(mu), k, ...)
+  qlnorm(x, log(mu) - k^2 / 2, k, ...)
 }
 ```
 
 A reparameterization of `dlnorm()`:
 
 ```{r}
-dlnorm2 <- add_metadata(function(x, mu, k) dlnorm(x, log(mu), k, log = TRUE),
+dlnorm2 <- add_metadata(function(x, mu, k) dlnorm(x, log(mu) - k^2 / 2, k, log = TRUE),
                         "lnorm", qlnorm2)
 ```
 
+
+## Growth models
 
 ### Logistic
 
@@ -271,7 +311,7 @@ logistic <- function(t, K, r, t0) {
 The minus log-likelihood function factory:
 
 ```{r}
-make_logistic_mLL <- function(x, f) {
+logistic_mLL_factory <- function(x, f) {
   function(K, r, t0, k) {
     - sum(f(x$OD, logistic(x$time, exp(K), exp(r), exp(t0)), exp(k)))  
   }
@@ -284,9 +324,10 @@ model:
 ```{r}
 logistic_ini_val <- function(df, k = 1) {
   time <- df$time
-  K <- max(df$OD)
-  halfK <- K / 2
-  evaluate <- function(x) approx(time, df$OD, x)$y
+  OD <- df$OD
+  K <- max(OD)
+  halfK <- K / 2 - min(OD) / 2                        # (second term could be optional)
+  evaluate <- function(x) approx(time, OD, x)$y
   distance <- function(x) abs(evaluate(x) - halfK)
   t0 <- optimize(distance, range(time))$minimum
   r <- df |> 
@@ -306,23 +347,151 @@ for the minus log-likelihood function:
 
 ```{r}
 logistic_mle <- function(x, f, k = 1, ...) {
-  out <- mle2(make_logistic_mLL(x, f), logistic_ini_val(x, k), "Nelder-Mead",
+  out <- mle2(logistic_mLL_factory(x, f), logistic_ini_val(x, k), "Nelder-Mead",
               control = list(maxit = 1e4), ...)
   out@data <- list(data = x, distribution = f)
   out
 }
 ```
 
-An example using a log-normal distribution:
+A function that performs model predictions:
 
 ```{r}
-(fit <- od_data |> 
-  filter(Sample == "W", Medium == "M9", replicate == 1, time < 15 * 60) |> 
-  logistic_mle(dlnorm2))
+logistic_predict <- function(x, t, ci = .95) {
+  params <- as.list(coef2(x))
+  f <- attr(x@data$distribution, "q")
+  q <- function(meanlog, lower = FALSE) f((1 - ci) / 2, meanlog, params$k, lower)
+  tibble(time = t,
+         fit = with(params, logistic(t, K, r, t0)),
+         lwr = q(fit, TRUE),
+         upr = q(fit))
+}
 ```
 
 
-## Batches
+### Hard-lag logistic
+
+The logistic growth model:
+
+```{r}
+hl_logistic <- function(t, K, r, t0, l, n) {
+  out <- K / (1 + exp(-(t - t0) * r))
+  out[t < l] <- n
+  out
+}
+```
+
+The minus log-likelihood function factory:
+
+```{r}
+hl_logistic_mLL_factory <- function(x, f) {
+  function(K, r, t0, k, l, n) {
+    - sum(f(x$OD,
+            hl_logistic(x$time, exp(K), exp(r), exp(t0), exp(l), exp(n)), exp(k)))  
+  }
+}
+```
+
+A function that looks for good initial values for the parameters of the logistic growth
+model:
+
+```{r}
+hl_logistic_ini_val <- function(df, k = 1, l = 200, n = .1) {
+  time <- df$time
+  OD <- df$OD
+  K <- max(OD)
+  halfK <- (K - min(OD)) / 2
+  evaluate <- function(x) approx(time, df$OD, x)$y
+  distance <- function(x) abs(evaluate(x) - halfK)
+  t0 <- optimize(distance, range(time))$minimum
+  r <- df |> 
+    filter(between(time, l, t0)) |> 
+    mutate(across(OD, log)) |> 
+    lm(OD ~ time, data = _) |> 
+    coef() |> 
+    extract(2) |> 
+    unname()
+  as.list(log(c(K = K, r = r, t0 = t0, k = k, l = 200, n = .1)))
+}
+```
+
+A tuning of the `mle2()` function that includes the automatic initial values of the 
+parameters search and the specification of the density of probability we want to use
+for the minus log-likelihood function:
+
+```{r}
+hl_logistic_mle <- function(x, f, k = 1, l = 200, n = .1, ...) {
+  out <- mle2(hl_logistic_mLL_factory(x, f), hl_logistic_ini_val(x, k, l, n),
+              "Nelder-Mead", control = list(maxit = 1e4), ...)
+  out@data <- list(data = x, distribution = f)
+  out
+}
+```
+
+A function that performs model predictions:
+
+```{r}
+hl_logistic_predict <- function(x, t, ci = .95) {
+  params <- as.list(coef2(x))
+  f <- attr(x@data$distribution, "q")
+  q <- function(meanlog, lower = FALSE) f((1 - ci) / 2, meanlog, params$k, lower)
+  tibble(time = t,
+         fit = with(params, hl_logistic(t, K, r, t0, l, n)),
+         lwr = q(fit, TRUE),
+         upr = q(fit))
+}
+```
+
+
+## Individual functions
+
+A function that plots the model's prediction:
+
+```{r}
+plot_predictions <- function(x, col = "steelblue", alpha = .3, ...) {
+  with(x, {
+    t <- time / 60
+    plot_od(t, fit, type = "n", ...)
+    polygon(c(t, rev(t)), c(lwr, rev(upr)), border = NA, col = adjustcolor(col, alpha))
+    lines(t, fit, col = col, lwd = 2)
+  })
+}
+```
+
+A function that adds data points:
+
+```{r}
+add_data <- function(x, col = "darkgoldenrod") {
+  with(x@data$data, points(time / 60, OD, col = col, pch = 19))
+}
+```
+
+Let's combine them:
+
+```{r}
+plot_fit <- function(pred, fit, ylim = NULL, col_data = "darkgoldenrod",
+                     col_model = "steelblue", alpha = .3, ...) {
+  if (is.null(ylim)) {
+    OD <- fit@data$data$OD
+    ylim <- c(min(c(pred$lwr, OD)), max(c(pred$upr, OD)))
+  }
+  plot_predictions(pred, col_model, alpha, ylim = ylim, ...)
+  add_data(fit, col = col_data)
+}
+```
+
+An example using a log-normal distribution:
+
+```{r}
+logistic_fit <- od_data |> 
+  filter(Sample == "W", Medium == "M9", replicate == 1, time < 15 * 60) |> 
+  logistic_mle(dlnorm2)
+logistic_pred <- logistic_predict(logistic_fit, seq(0, 15 * 60, le = 512))
+plot_fit(logistic_pred, logistic_fit)
+```
+
+
+## Batch functions
 
 A function that fits a model on all the replicates of a data frame:
 
@@ -349,7 +518,7 @@ A function that summarizes the fits of an output from `fit_by_replicate()`:
 fits_summary <- function(x) {
   bind_cols(map_dfr(x, ~ tibble(dist = attr(.x@data$distribution, "name"))),
             map_dfr(x, ~ unique(select(.x@data$data, -time, -OD))),
-            map_dfr(x, ~ as_tibble_row(exp(coef(.x)))),
+            map_dfr(x, ~ as_tibble_row(coef2(.x))),
             map_dfr(x, ~ tibble(LL = as.numeric(logLik(.x)))),
             map_dfr(x, ~ tibble(conv = .x@details$convergence)))
 }
@@ -364,60 +533,57 @@ M9_medium_lnorm |>
   print(n = Inf)
 ```
 
-A function that performs model predictions:
-
-```{r}
-predictions <- function(x, t, ci = .95) {
-  params <- as.list(exp(coef(x)))
-  f <- attr(x@data$distribution, "q")
-  q <- function(meanlog, lower = FALSE) f(1 - ci / 2, meanlog, params$k, lower)
-  tibble(time = t,
-         fit = with(params, logistic(t, K, r, t0)),
-         lwr = q(fit),
-         upr = q(fit, TRUE))
-}
-```
-
-A function that plots the model's prediction:
-
-```{r}
-plot_predictions <- function(x, col = "steelblue", alpha = .3) {
-  with(x, {
-    t <- time / 60
-    plot(t, fit, type = "n", xlab = "time (hours)", ylab = "OD 600nm")
-    polygon(c(t, rev(t)), c(lwr, rev(upr)), border = NA, col = adjustcolor(col, alpha))
-    lines(t, fit, col = col)
-  })
-}
-```
-
-A function that adds data points:
-
-```{r}
-add_data <- function(x) {
-  with(x@data$data, points(time / 60, OD))
-}
-```
-
-Let's try it:
-
-```{r}
-pred <- predictions(fit, seq(0, 15 * 60, le = 512))
-plot_predictions(pred)
-add_data(fit)
-```
-
 
 ## Lags
 
 ```{r}
-fit <- od_data |> 
-  filter(Sample == "W", Medium == "M9", replicate == 1, time < 15 * 60) |> 
+t_vals <- seq(0, 15 * 60, le = 512)
+dset <- filter(od_data, Sample == "W", Medium == "M9", replicate == 1, time < 15 * 60)
+```
+
+```{r}
+fit1 <- logistic_mle(dset, dlnorm2)
+pred1 <- logistic_predict(fit1, t_vals)
+plot_fit(pred1, fit1)
+```
+
+```{r}
+fit2 <- dset |>
   tail(-10) |> 
   logistic_mle(dlnorm2)
+pred2 <- logistic_predict(fit2, t_vals)
+plot_fit(pred2, fit2)
+```
 
-pred <- predictions(fit, seq(0, 15 * 60, le = 512))
-plot_predictions(pred)
-add_data(fit)
+```{r}
+fit3 <- hl_logistic_mle(dset, dlnorm2)
+pred3 <- hl_logistic_predict(fit3, t_vals)
+plot_fit(pred3, fit3)
+```
+
+```{r}
+fit4 <- dset |> 
+  filter(between(OD, .1, .8)) |> 
+  logistic_mle(dlnorm2)
+pred4 <- logistic_predict(fit4, t_vals)
+plot_fit(pred4, fit4)
+```
+
+```{r eval=FALSE}
+fit5 <- dset |> 
+  filter(between(OD, .1, .8)) |> 
+  logistic_mle(dgamma2)
+pred5 <- logistic_predict(fit5, t_vals)
+plot_fit(pred5, fit5)
+```
+
+```{r}
+fit6 <- dset |> 
+  filter(between(OD, .1, .8)) |> 
+  logistic_mle(dnorm2)
+pred6 <- logistic_predict(fit6, t_vals)
+plot_fit(pred6, fit6)
+coef2(fit6)
+logLik(fit6)
 ```
 
