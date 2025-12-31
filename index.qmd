@@ -74,6 +74,15 @@ The name of the data file:
 data_file <- "CultureData_11523_Van.xlsx"
 ```
 
+Defining some colors:
+
+```{r}
+col1 <- "steelblue"
+col2 <- "goldenrod"
+col3 <- "darkgoldenrod"
+```
+
+
 ```{r include = FALSE}
 path2cache <- paste0(path2data, "cache/")
 if (! dir.exists(path2cache)) dir.create(path2cache)
@@ -86,15 +95,24 @@ saveRDScache <- function(object, file) saveRDS(object, make_path(file))
 
 ## Packages
 
-```{r message = FALSE}
-library(readxl)
-library(tidyr)
-library(dplyr)
-library(purrr)
-library(stringr)
-library(magrittr)
-library(bbmle)
-library(tibble)
+Required packages:
+
+```{r}
+required <- c("readxl", "tidyr", "dplyr", "purrr", "stringr", "magrittr", "bbmle",
+              "tibble")
+```
+
+Installing those that are not installed yet:
+
+```{r}
+to_install <- required[! required %in% installed.packages()[,"Package"]]
+if (length(to_install)) install.packages(to_install)
+```
+
+Loading the packages for interactive use:
+
+```{r warning = FALSE, message = FALSE}
+invisible(sapply(required, library, character.only = TRUE))
 ```
 
 
@@ -190,7 +208,7 @@ unique(nb_rep$n)
 Setting the colors:
 
 ```{r}
-col_set <- c("steelblue", "goldenrod")
+col_set <- c(col1, col2)
 col_set_names <- unique_levels$Medium
 col_set_alpha <- col_set |>
   adjustcolor(.3) |> 
@@ -357,7 +375,9 @@ logistic_mle <- function(x, f, k = 1, ...) {
 A function that performs model predictions:
 
 ```{r}
-logistic_predict <- function(x, t, ci = .95) {
+t_vals <- seq(0, 15 * 60, le = 512)
+
+logistic_predict <- function(x, t = t_vals, ci = .95) {
   params <- as.list(coef2(x))
   f <- attr(x@data$distribution, "q")
   q <- function(mu, lower = FALSE) f((1 - ci) / 2, mu, params$k, lower.tail = lower)
@@ -431,7 +451,7 @@ hl_logistic_mle <- function(x, f, k = 1, l = 200, n = .1, ...) {
 A function that performs model predictions:
 
 ```{r}
-hl_logistic_predict <- function(x, t, ci = .95) {
+hl_logistic_predict <- function(x, t = t_vals, ci = .95) {
   params <- as.list(coef2(x))
   f <- attr(x@data$distribution, "q")
   q <- function(mu, lower = FALSE) f((1 - ci) / 2, mu, params$k, lower.tail = lower)
@@ -448,31 +468,37 @@ hl_logistic_predict <- function(x, t, ci = .95) {
 A function that plots the model's prediction:
 
 ```{r}
-plot_predictions <- function(x, col = "steelblue", alpha = .3, ...) {
+plot_predictions <- function(x, col = col1, alpha = .3, add = FALSE, ...) {
   with(x, {
     t <- time / 60
-    plot_od(t, fit, type = "n", ...)
+    if (! add) plot_od(t, fit, type = "n", ...)
     polygon(c(t, rev(t)), c(lwr, rev(upr)), border = NA, col = adjustcolor(col, alpha))
     lines(t, fit, col = col, lwd = 2)
   })
 }
 ```
 
+A function that retrieves the data from a fitted model:
+
+```{r}
+get_data <- function(x) x@data$data
+```
+
 A function that adds data points:
 
 ```{r}
-add_data <- function(x, col = "darkgoldenrod") {
-  with(x@data$data, points(time / 60, OD, col = col, pch = 19))
+add_data <- function(x, col = col3) {
+  with(get_data(x), points(time / 60, OD, col = col, pch = 19))
 }
 ```
 
 Let's combine them:
 
 ```{r}
-plot_fit <- function(pred, fit, ylim = NULL, col_data = "darkgoldenrod",
-                     col_model = "steelblue", alpha = .3, ...) {
+plot_fit <- function(pred, fit, ylim = NULL, col_data = col3, col_model = col1,
+                     alpha = .3, ...) {
   if (is.null(ylim)) {
-    OD <- fit@data$data$OD
+    OD <- get_data(fit)$OD
     ylim <- c(min(c(pred$lwr, OD)), max(c(pred$upr, OD)))
   }
   plot_predictions(pred, col_model, alpha, ylim = ylim, ...)
@@ -486,7 +512,7 @@ An example using a log-normal distribution:
 logistic_fit <- od_data |> 
   filter(Sample == "W", Medium == "M9", replicate == 1, time < 15 * 60) |> 
   logistic_mle(dlnorm2)
-logistic_pred <- logistic_predict(logistic_fit, seq(0, 15 * 60, le = 512))
+logistic_pred <- logistic_predict(logistic_fit)
 plot_fit(logistic_pred, logistic_fit)
 ```
 
@@ -517,7 +543,7 @@ A function that summarizes the fits of an output from `fit_by_replicate()`:
 ```{r}
 fits_summary <- function(x) {
   bind_cols(map_dfr(x, ~ tibble(dist = attr(.x@data$distribution, "name"))),
-            map_dfr(x, ~ unique(select(.x@data$data, -time, -OD))),
+            map_dfr(x, ~ unique(select(get_data(.x), -time, -OD))),
             map_dfr(x, ~ as_tibble_row(coef2(.x))),
             map_dfr(x, ~ tibble(LL = as.numeric(logLik(.x)))),
             map_dfr(x, ~ tibble(conv = .x@details$convergence)))
@@ -537,14 +563,19 @@ M9_medium_lnorm |>
 ## Lags
 
 ```{r}
-t_vals <- seq(0, 15 * 60, le = 512)
 dset <- filter(od_data, Sample == "W", Medium == "M9", replicate == 1, time < 15 * 60)
+```
+
+```{r}
+plot_fit_and_data <- function(fit, ...) {
+  plot_fit(logistic_predict(fit), fit, ...)
+}
 ```
 
 ```{r}
 logistic_and_data <- function(x, f) {
   fit <- logistic_mle(x, f)
-  plot_fit(logistic_predict(fit, t_vals), fit)
+  plot_fit_and_data(fit)
   logLik(fit)
 }
 ```
@@ -583,6 +614,8 @@ logistic_and_data(dset2, dnorm2)
 
 
 ## Batches
+
+### Best models
 
 Working on the data that are presumed to be in the linear domain:
 
@@ -680,11 +713,98 @@ Selecting the best models for each replicate:
 best_models <- select_best_models(all_fits, models_comparisons$best_model)
 ```
 
+Their fit summaries:
+
+```{r}
+best_models_summary <- fits_summary(best_models)
+```
+
 Which gives:
 
 ```{r}
-best_models |>
-  fits_summary() |> 
-  print(n = Inf)
+print(best_models_summary, n = Inf)
+```
+
+### Diagnostics
+
+```{r}
+plot_replicates <- function(bm, rep, colA = col1, colB = col2) {
+  medium1 <- bm[[rep]]
+  medium2 <- bm[[rep + 6]]
+  xlim <- c(min(c(get_data(medium1)$time, get_data(medium2)$time)) / 60, 15)
+  plot_fit_and_data(medium1, col_data = colA, col_model = colA,
+                    xlim = xlim, ylim = c(0, .8))
+  plot_fit_and_data(medium2, col_data = colB, col_model = colB, add = TRUE)
+}
+```
+
+```{r}
+plot_strain <- function(strain) {
+  opar <- par(mfrow = 2:3, plt = c(.12, .97, .17, .95))
+  for (i in 1:6) plot_replicates(strain, i)
+  par(opar)
+}
+```
+
+```{r fig.width = 8.3, fig.height =  8.3 * (5 / 7) * (2 / 3)}
+seq(1, length(best_models), 12) |> 
+  map(~ extract(best_models, .x:(.x + 11))) |> 
+  walk(plot_strain)
+```
+
+A function that computes a model's prediction at the observed data points:
+
+```{r}
+observations_predictions <- function(fitted_model) {
+  the_data <- get_data(fitted_model)
+  left_join(the_data, logistic_predict(fitted_model, the_data$time), "time")
+}
+```
+
+Let's look at the relationship between model prediction and measured values:
+
+```{r fig.height = 5, fig.width = 5}
+best_models |> 
+  map(observations_predictions) |> 
+  bind_rows() |> 
+  with(plot(OD, fit, col = col1, xlim = 0:1, ylim = 0:1, asp = 1,
+            xlab = "measured OD", ylab = "predicted OD"))
+
+abline(0, 1, lwd = 2, col = col3)
+```
+
+### Estimates
+
+```{r}
+best_models_summary
+```
+
+```{r}
+confint(best_models[[1]])
+```
+
+```{r eval = FALSE}
+a <- map(best_models, confint)
+```
+
+```{r include = FALSE}
+if (file_exists("a.rds")) {
+  a <- readRDScache("a.rds")
+} else {
+  a <- map(best_models, confint)
+  saveRDScache(a, "a.rds")
+}
+```
+
+```{r}
+class(a[[1]])
+class(a[[9]])
+```
+
+```{r}
+sel <- which(! map_lgl(a, is.matrix))
+map(a[sel], coef)
+#a2 <- map(a[sel], confint)
+#best_models
 ```
 
