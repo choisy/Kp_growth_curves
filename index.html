@@ -533,7 +533,7 @@ $time
 <div class="sourceCode cell-code" id="cb43"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a>hl_logistic_predict <span class="ot">&lt;-</span> <span class="cf">function</span>(x, t, <span class="at">ci =</span> .<span class="dv">95</span>) {</span>
 <span id="cb43-2"><a href="#cb43-2" aria-hidden="true" tabindex="-1"></a>  params <span class="ot">&lt;-</span> <span class="fu">as.list</span>(<span class="fu">coef2</span>(x))</span>
 <span id="cb43-3"><a href="#cb43-3" aria-hidden="true" tabindex="-1"></a>  f <span class="ot">&lt;-</span> <span class="fu">attr</span>(x<span class="sc">@</span>data<span class="sc">$</span>distribution, <span class="st">"q"</span>)</span>
-<span id="cb43-4"><a href="#cb43-4" aria-hidden="true" tabindex="-1"></a>  q <span class="ot">&lt;-</span> <span class="cf">function</span>(meanlog, <span class="at">lower =</span> <span class="cn">FALSE</span>) <span class="fu">f</span>((<span class="dv">1</span> <span class="sc">-</span> ci) <span class="sc">/</span> <span class="dv">2</span>, meanlog, params<span class="sc">$</span>k, lower)</span>
+<span id="cb43-4"><a href="#cb43-4" aria-hidden="true" tabindex="-1"></a>  q <span class="ot">&lt;-</span> <span class="cf">function</span>(mu, <span class="at">lower =</span> <span class="cn">FALSE</span>) <span class="fu">f</span>((<span class="dv">1</span> <span class="sc">-</span> ci) <span class="sc">/</span> <span class="dv">2</span>, mu, params<span class="sc">$</span>k, <span class="at">lower.tail =</span> lower)</span>
 <span id="cb43-5"><a href="#cb43-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">time =</span> t,</span>
 <span id="cb43-6"><a href="#cb43-6" aria-hidden="true" tabindex="-1"></a>         <span class="at">fit =</span> <span class="fu">with</span>(params, <span class="fu">hl_logistic</span>(t, K, r, t0, l, n)),</span>
 <span id="cb43-7"><a href="#cb43-7" aria-hidden="true" tabindex="-1"></a>         <span class="at">lwr =</span> <span class="fu">q</span>(fit, <span class="cn">TRUE</span>),</span>
@@ -665,35 +665,21 @@ $time
 <span id="cb53-2"><a href="#cb53-2" aria-hidden="true" tabindex="-1"></a>dset <span class="ot">&lt;-</span> <span class="fu">filter</span>(od_data, Sample <span class="sc">==</span> <span class="st">"W"</span>, Medium <span class="sc">==</span> <span class="st">"M9"</span>, replicate <span class="sc">==</span> <span class="dv">1</span>, time <span class="sc">&lt;</span> <span class="dv">15</span> <span class="sc">*</span> <span class="dv">60</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb54"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb54-1"><a href="#cb54-1" aria-hidden="true" tabindex="-1"></a>fit1 <span class="ot">&lt;-</span> <span class="fu">logistic_mle</span>(dset, dlnorm2)</span>
-<span id="cb54-2"><a href="#cb54-2" aria-hidden="true" tabindex="-1"></a>pred1 <span class="ot">&lt;-</span> <span class="fu">logistic_predict</span>(fit1, t_vals)</span>
-<span id="cb54-3"><a href="#cb54-3" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_fit</span>(pred1, fit1)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output-display">
-<div class="quarto-figure quarto-figure-center">
-<figure class="figure">
-<p><img src="index_files/figure-html/unnamed-chunk-47-1.png" class="img-fluid quarto-figure quarto-figure-center figure-img" width="537"></p>
-</figure>
-</div>
-</div>
+<div class="sourceCode cell-code" id="cb54"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb54-1"><a href="#cb54-1" aria-hidden="true" tabindex="-1"></a>logistic_and_data <span class="ot">&lt;-</span> <span class="cf">function</span>(x, f) {</span>
+<span id="cb54-2"><a href="#cb54-2" aria-hidden="true" tabindex="-1"></a>  fit <span class="ot">&lt;-</span> <span class="fu">logistic_mle</span>(x, f)</span>
+<span id="cb54-3"><a href="#cb54-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">plot_fit</span>(<span class="fu">logistic_predict</span>(fit, t_vals), fit)</span>
+<span id="cb54-4"><a href="#cb54-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">logLik</span>(fit)</span>
+<span id="cb54-5"><a href="#cb54-5" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb55"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb55-1"><a href="#cb55-1" aria-hidden="true" tabindex="-1"></a>fit2 <span class="ot">&lt;-</span> dset <span class="sc">|&gt;</span></span>
-<span id="cb55-2"><a href="#cb55-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tail</span>(<span class="sc">-</span><span class="dv">10</span>) <span class="sc">|&gt;</span> </span>
-<span id="cb55-3"><a href="#cb55-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">logistic_mle</span>(dlnorm2)</span>
-<span id="cb55-4"><a href="#cb55-4" aria-hidden="true" tabindex="-1"></a>pred2 <span class="ot">&lt;-</span> <span class="fu">logistic_predict</span>(fit2, t_vals)</span>
-<span id="cb55-5"><a href="#cb55-5" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_fit</span>(pred2, fit2)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output-display">
-<div class="quarto-figure quarto-figure-center">
-<figure class="figure">
-<p><img src="index_files/figure-html/unnamed-chunk-48-1.png" class="img-fluid quarto-figure quarto-figure-center figure-img" width="537"></p>
-</figure>
-</div>
-</div>
+<div class="sourceCode cell-code" id="cb55"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb55-1"><a href="#cb55-1" aria-hidden="true" tabindex="-1"></a>hl_logistic_and_data <span class="ot">&lt;-</span> <span class="cf">function</span>(x, f) {</span>
+<span id="cb55-2"><a href="#cb55-2" aria-hidden="true" tabindex="-1"></a>  fit <span class="ot">&lt;-</span> <span class="fu">hl_logistic_mle</span>(x, f)</span>
+<span id="cb55-3"><a href="#cb55-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">plot_fit</span>(<span class="fu">hl_logistic_predict</span>(fit, t_vals), fit)</span>
+<span id="cb55-4"><a href="#cb55-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">logLik</span>(fit)</span>
+<span id="cb55-5"><a href="#cb55-5" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb56"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb56-1"><a href="#cb56-1" aria-hidden="true" tabindex="-1"></a>fit3 <span class="ot">&lt;-</span> <span class="fu">hl_logistic_mle</span>(dset, dlnorm2)</span>
-<span id="cb56-2"><a href="#cb56-2" aria-hidden="true" tabindex="-1"></a>pred3 <span class="ot">&lt;-</span> <span class="fu">hl_logistic_predict</span>(fit3, t_vals)</span>
-<span id="cb56-3"><a href="#cb56-3" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_fit</span>(pred3, fit3)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb56"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb56-1"><a href="#cb56-1" aria-hidden="true" tabindex="-1"></a><span class="fu">logistic_and_data</span>(dset, dlnorm2)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
@@ -701,13 +687,12 @@ $time
 </figure>
 </div>
 </div>
+<div class="cell-output cell-output-stdout">
+<pre><code>'log Lik.' 83.98299 (df=4)</code></pre>
+</div>
 </div>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb57"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb57-1"><a href="#cb57-1" aria-hidden="true" tabindex="-1"></a>fit4 <span class="ot">&lt;-</span> dset <span class="sc">|&gt;</span> </span>
-<span id="cb57-2"><a href="#cb57-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="fu">between</span>(OD, .<span class="dv">1</span>, .<span class="dv">8</span>)) <span class="sc">|&gt;</span> </span>
-<span id="cb57-3"><a href="#cb57-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">logistic_mle</span>(dlnorm2)</span>
-<span id="cb57-4"><a href="#cb57-4" aria-hidden="true" tabindex="-1"></a>pred4 <span class="ot">&lt;-</span> <span class="fu">logistic_predict</span>(fit4, t_vals)</span>
-<span id="cb57-5"><a href="#cb57-5" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_fit</span>(pred4, fit4)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb58"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb58-1"><a href="#cb58-1" aria-hidden="true" tabindex="-1"></a><span class="fu">logistic_and_data</span>(<span class="fu">tail</span>(dset, <span class="sc">-</span><span class="dv">10</span>), dlnorm2)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
@@ -715,13 +700,12 @@ $time
 </figure>
 </div>
 </div>
+<div class="cell-output cell-output-stdout">
+<pre><code>'log Lik.' 102.6441 (df=4)</code></pre>
+</div>
 </div>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb58"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb58-1"><a href="#cb58-1" aria-hidden="true" tabindex="-1"></a>fit5 <span class="ot">&lt;-</span> dset <span class="sc">|&gt;</span> </span>
-<span id="cb58-2"><a href="#cb58-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="fu">between</span>(OD, .<span class="dv">1</span>, .<span class="dv">8</span>)) <span class="sc">|&gt;</span> </span>
-<span id="cb58-3"><a href="#cb58-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">logistic_mle</span>(dgamma2)</span>
-<span id="cb58-4"><a href="#cb58-4" aria-hidden="true" tabindex="-1"></a>pred5 <span class="ot">&lt;-</span> <span class="fu">logistic_predict</span>(fit5, t_vals)</span>
-<span id="cb58-5"><a href="#cb58-5" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_fit</span>(pred5, fit5)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb60"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb60-1"><a href="#cb60-1" aria-hidden="true" tabindex="-1"></a><span class="fu">hl_logistic_and_data</span>(<span class="fu">filter</span>(dset, <span class="fu">between</span>(OD, .<span class="dv">1</span>, .<span class="dv">8</span>)), dlnorm2)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
@@ -729,13 +713,12 @@ $time
 </figure>
 </div>
 </div>
+<div class="cell-output cell-output-stdout">
+<pre><code>'log Lik.' 116.2635 (df=6)</code></pre>
+</div>
 </div>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb59"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb59-1"><a href="#cb59-1" aria-hidden="true" tabindex="-1"></a>fit6 <span class="ot">&lt;-</span> dset <span class="sc">|&gt;</span> </span>
-<span id="cb59-2"><a href="#cb59-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="fu">between</span>(OD, .<span class="dv">1</span>, .<span class="dv">8</span>)) <span class="sc">|&gt;</span> </span>
-<span id="cb59-3"><a href="#cb59-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">logistic_mle</span>(dnorm2)</span>
-<span id="cb59-4"><a href="#cb59-4" aria-hidden="true" tabindex="-1"></a>pred6 <span class="ot">&lt;-</span> <span class="fu">logistic_predict</span>(fit6, t_vals)</span>
-<span id="cb59-5"><a href="#cb59-5" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_fit</span>(pred6, fit6)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb62"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb62-1"><a href="#cb62-1" aria-hidden="true" tabindex="-1"></a><span class="fu">logistic_and_data</span>(<span class="fu">filter</span>(dset, <span class="fu">between</span>(OD, .<span class="dv">1</span>, .<span class="dv">8</span>)), dgamma2)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
@@ -743,12 +726,19 @@ $time
 </figure>
 </div>
 </div>
-<div class="sourceCode cell-code" id="cb60"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb60-1"><a href="#cb60-1" aria-hidden="true" tabindex="-1"></a><span class="fu">coef2</span>(fit6)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>           K            r           t0            k 
-  0.44166393   0.01526304 312.01438638   0.00663783 </code></pre>
+<pre><code>'log Lik.' 116.0758 (df=4)</code></pre>
 </div>
-<div class="sourceCode cell-code" id="cb62"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb62-1"><a href="#cb62-1" aria-hidden="true" tabindex="-1"></a><span class="fu">logLik</span>(fit6)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div class="cell" data-layout-align="center">
+<div class="sourceCode cell-code" id="cb64"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb64-1"><a href="#cb64-1" aria-hidden="true" tabindex="-1"></a><span class="fu">logistic_and_data</span>(<span class="fu">filter</span>(dset, <span class="fu">between</span>(OD, .<span class="dv">1</span>, .<span class="dv">8</span>)), dnorm2)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="index_files/figure-html/unnamed-chunk-53-1.png" class="img-fluid quarto-figure quarto-figure-center figure-img" width="537"></p>
+</figure>
+</div>
+</div>
 <div class="cell-output cell-output-stdout">
 <pre><code>'log Lik.' 136.6507 (df=4)</code></pre>
 </div>

@@ -434,7 +434,7 @@ A function that performs model predictions:
 hl_logistic_predict <- function(x, t, ci = .95) {
   params <- as.list(coef2(x))
   f <- attr(x@data$distribution, "q")
-  q <- function(meanlog, lower = FALSE) f((1 - ci) / 2, meanlog, params$k, lower)
+  q <- function(mu, lower = FALSE) f((1 - ci) / 2, mu, params$k, lower.tail = lower)
   tibble(time = t,
          fit = with(params, hl_logistic(t, K, r, t0, l, n)),
          lwr = q(fit, TRUE),
@@ -542,48 +542,38 @@ dset <- filter(od_data, Sample == "W", Medium == "M9", replicate == 1, time < 15
 ```
 
 ```{r}
-fit1 <- logistic_mle(dset, dlnorm2)
-pred1 <- logistic_predict(fit1, t_vals)
-plot_fit(pred1, fit1)
+logistic_and_data <- function(x, f) {
+  fit <- logistic_mle(x, f)
+  plot_fit(logistic_predict(fit, t_vals), fit)
+  logLik(fit)
+}
 ```
 
 ```{r}
-fit2 <- dset |>
-  tail(-10) |> 
-  logistic_mle(dlnorm2)
-pred2 <- logistic_predict(fit2, t_vals)
-plot_fit(pred2, fit2)
+hl_logistic_and_data <- function(x, f) {
+  fit <- hl_logistic_mle(x, f)
+  plot_fit(hl_logistic_predict(fit, t_vals), fit)
+  logLik(fit)
+}
 ```
 
 ```{r}
-fit3 <- hl_logistic_mle(dset, dlnorm2)
-pred3 <- hl_logistic_predict(fit3, t_vals)
-plot_fit(pred3, fit3)
+logistic_and_data(dset, dlnorm2)
 ```
 
 ```{r}
-fit4 <- dset |> 
-  filter(between(OD, .1, .8)) |> 
-  logistic_mle(dlnorm2)
-pred4 <- logistic_predict(fit4, t_vals)
-plot_fit(pred4, fit4)
+logistic_and_data(tail(dset, -10), dlnorm2)
 ```
 
 ```{r}
-fit5 <- dset |> 
-  filter(between(OD, .1, .8)) |> 
-  logistic_mle(dgamma2)
-pred5 <- logistic_predict(fit5, t_vals)
-plot_fit(pred5, fit5)
+hl_logistic_and_data(filter(dset, between(OD, .1, .8)), dlnorm2)
 ```
 
 ```{r}
-fit6 <- dset |> 
-  filter(between(OD, .1, .8)) |> 
-  logistic_mle(dnorm2)
-pred6 <- logistic_predict(fit6, t_vals)
-plot_fit(pred6, fit6)
-coef2(fit6)
-logLik(fit6)
+logistic_and_data(filter(dset, between(OD, .1, .8)), dgamma2)
+```
+
+```{r}
+logistic_and_data(filter(dset, between(OD, .1, .8)), dnorm2)
 ```
 
