@@ -498,7 +498,7 @@ A function that fits a model on all the replicates of a data frame:
 ```{r}
 fit_by_replicate <- function(x, f) {
   x |> 
-    group_by(Sample, replicate) |> 
+    group_by(Sample, Medium, replicate) |> 
     group_split() |> 
     map(logistic_mle, f)
 }
@@ -566,14 +566,125 @@ logistic_and_data(tail(dset, -10), dlnorm2)
 ```
 
 ```{r}
-hl_logistic_and_data(filter(dset, between(OD, .1, .8)), dlnorm2)
+dset2 <- filter(dset, between(OD, .1, .8))
 ```
 
 ```{r}
-logistic_and_data(filter(dset, between(OD, .1, .8)), dgamma2)
+hl_logistic_and_data(dset2, dlnorm2)
 ```
 
 ```{r}
-logistic_and_data(filter(dset, between(OD, .1, .8)), dnorm2)
+logistic_and_data(dset2, dgamma2)
+```
+
+```{r}
+logistic_and_data(dset2, dnorm2)
+```
+
+
+## Batches
+
+Working on the data that are presumed to be in the linear domain:
+
+```{r}
+od_data2 <- filter(od_data, between(OD, .1, .8), time < 15 * 60)
+```
+
+Considering 3 models
+
+```{r}
+models <- setNames(c(dnorm2, dlnorm2, dgamma2),
+                   c("norm", "lnorm", "gamma"))
+```
+
+Fitting 3 models to each of the replicates:
+
+```{r eval = FALSE}
+all_fits <- map(models, ~ fit_by_replicate(od_data2, .x))
+```
+
+```{r include = FALSE}
+if (file_exists("all_fits.rds")) {
+  all_fits <- readRDScache("all_fits.rds")
+} else {
+  all_fits <- map(models, ~ fit_by_replicate(od_data2, .x))
+  saveRDScache(all_fits, "all_fits.rds")
+}
+```
+
+The summaries of the fits:
+
+```{r}
+all_fits_summary <- map(all_fits, fits_summary)
+```
+
+Checking convergence:
+
+```{r}
+all_fits_summary |> 
+  bind_rows() |> 
+  pull(conv) |> 
+  is_greater_than(0) |> 
+  any()
+```
+
+A table for comparing models' likelihoods:
+
+```{r}
+models_names <- names(models)
+
+models_comparisons <- all_fits_summary |>
+  map(~ select(.x, Sample, Medium, replicate, LL)) |> 
+  map2(paste0("_", models_names), ~ rename_with(.x, \(x) paste0(x, .y), LL)) |> 
+  reduce(left_join, by = c("Sample", "Medium", "replicate")) |> 
+  rowwise() |> 
+  mutate(best_model = models_names[which.max(c(LL_norm, LL_lnorm, LL_gamma))]) |> 
+  ungroup()
+```
+
+Comparing likelihoods:
+
+```{r}
+models_comparisons |> 
+  group_by(best_model) |> 
+  tally()
+```
+
+Checking these 2 log-normal models:
+
+```{r}
+filter(models_comparisons, best_model == "lnorm")
+```
+
+A function that selects the best models from a list of models options:
+
+```{r}
+select_best_models <- function(fits, best) {
+  table_best <- table(best)
+  if (length(table_best) > 1) {
+    models <- names(sort(table_best))
+    out <- fits[[last(models)]]
+    for (model in head(models, -1)) {
+      sel <- which(best == model)
+      out[sel] <- all_fits[[model]][sel]
+    }
+    return(out)
+  }
+  fits
+}
+```
+
+Selecting the best models for each replicate:
+
+```{r}
+best_models <- select_best_models(all_fits, models_comparisons$best_model)
+```
+
+Which gives:
+
+```{r}
+best_models |>
+  fits_summary() |> 
+  print(n = Inf)
 ```
 
