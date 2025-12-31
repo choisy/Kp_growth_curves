@@ -472,7 +472,7 @@ $time
 <div class="sourceCode cell-code" id="cb38"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a>logistic_predict <span class="ot">&lt;-</span> <span class="cf">function</span>(x, t, <span class="at">ci =</span> .<span class="dv">95</span>) {</span>
 <span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a>  params <span class="ot">&lt;-</span> <span class="fu">as.list</span>(<span class="fu">coef2</span>(x))</span>
 <span id="cb38-3"><a href="#cb38-3" aria-hidden="true" tabindex="-1"></a>  f <span class="ot">&lt;-</span> <span class="fu">attr</span>(x<span class="sc">@</span>data<span class="sc">$</span>distribution, <span class="st">"q"</span>)</span>
-<span id="cb38-4"><a href="#cb38-4" aria-hidden="true" tabindex="-1"></a>  q <span class="ot">&lt;-</span> <span class="cf">function</span>(meanlog, <span class="at">lower =</span> <span class="cn">FALSE</span>) <span class="fu">f</span>((<span class="dv">1</span> <span class="sc">-</span> ci) <span class="sc">/</span> <span class="dv">2</span>, meanlog, params<span class="sc">$</span>k, lower)</span>
+<span id="cb38-4"><a href="#cb38-4" aria-hidden="true" tabindex="-1"></a>  q <span class="ot">&lt;-</span> <span class="cf">function</span>(mu, <span class="at">lower =</span> <span class="cn">FALSE</span>) <span class="fu">f</span>((<span class="dv">1</span> <span class="sc">-</span> ci) <span class="sc">/</span> <span class="dv">2</span>, mu, params<span class="sc">$</span>k, <span class="at">lower.tail =</span> lower)</span>
 <span id="cb38-5"><a href="#cb38-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">time =</span> t,</span>
 <span id="cb38-6"><a href="#cb38-6" aria-hidden="true" tabindex="-1"></a>         <span class="at">fit =</span> <span class="fu">with</span>(params, <span class="fu">logistic</span>(t, K, r, t0)),</span>
 <span id="cb38-7"><a href="#cb38-7" aria-hidden="true" tabindex="-1"></a>         <span class="at">lwr =</span> <span class="fu">q</span>(fit, <span class="cn">TRUE</span>),</span>
@@ -722,6 +722,13 @@ $time
 <span id="cb58-3"><a href="#cb58-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">logistic_mle</span>(dgamma2)</span>
 <span id="cb58-4"><a href="#cb58-4" aria-hidden="true" tabindex="-1"></a>pred5 <span class="ot">&lt;-</span> <span class="fu">logistic_predict</span>(fit5, t_vals)</span>
 <span id="cb58-5"><a href="#cb58-5" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_fit</span>(pred5, fit5)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="index_files/figure-html/unnamed-chunk-51-1.png" class="img-fluid quarto-figure quarto-figure-center figure-img" width="537"></p>
+</figure>
+</div>
+</div>
 </div>
 <div class="cell" data-layout-align="center">
 <div class="sourceCode cell-code" id="cb59"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb59-1"><a href="#cb59-1" aria-hidden="true" tabindex="-1"></a>fit6 <span class="ot">&lt;-</span> dset <span class="sc">|&gt;</span> </span>

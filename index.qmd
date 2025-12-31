@@ -360,7 +360,7 @@ A function that performs model predictions:
 logistic_predict <- function(x, t, ci = .95) {
   params <- as.list(coef2(x))
   f <- attr(x@data$distribution, "q")
-  q <- function(meanlog, lower = FALSE) f((1 - ci) / 2, meanlog, params$k, lower)
+  q <- function(mu, lower = FALSE) f((1 - ci) / 2, mu, params$k, lower.tail = lower)
   tibble(time = t,
          fit = with(params, logistic(t, K, r, t0)),
          lwr = q(fit, TRUE),
@@ -569,7 +569,7 @@ pred4 <- logistic_predict(fit4, t_vals)
 plot_fit(pred4, fit4)
 ```
 
-```{r eval=FALSE}
+```{r}
 fit5 <- dset |> 
   filter(between(OD, .1, .8)) |> 
   logistic_mle(dgamma2)
