@@ -363,9 +363,19 @@ A tuning of the `mle2()` function that includes the automatic initial values of 
 parameters search and the specification of the density of probability we want to use
 for the minus log-likelihood function:
 
-```{r}
-logistic_mle <- function(x, f, k = 1, ...) {
+```{r eval=FALSE, include=FALSE}
+logistic_mle0 <- function(x, f, k = 1, ...) {
   out <- mle2(logistic_mLL_factory(x, f), logistic_ini_val(x, k), "Nelder-Mead",
+              control = list(maxit = 1e4), ...)
+  out@data <- list(data = x, distribution = f)
+  out
+}
+```
+
+```{r}
+logistic_mle <- function(x, f, start = NULL, k = 1, ...) {
+  if (is.null(start)) start <- logistic_ini_val(x, k)
+  out <- mle2(logistic_mLL_factory(x, f), start, "Nelder-Mead",
               control = list(maxit = 1e4), ...)
   out@data <- list(data = x, distribution = f)
   out
@@ -806,5 +816,10 @@ sel <- which(! map_lgl(a, is.matrix))
 map(a[sel], coef)
 #a2 <- map(a[sel], confint)
 #best_models
+```
+
+```{r}
+bm9 <- confint(best_models[[9]])
+coef(bm9)
 ```
 
