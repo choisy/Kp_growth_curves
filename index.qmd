@@ -249,69 +249,39 @@ od_data |>
 
 ## Probability distributions
 
-A function that adds metadata to a function:
+A function that build probability distribution functions that package everything we
+need:
 
 ```{r}
-add_metadata <- function(f, name, q) {
-  attr(f, "name") <- name
-  attr(f, "q") <- q
-  f
+distribution <- function(name, d, q) {
+  attr(d, "q") <- q
+  attr(d, "name") <- name
+  d
 }
 ```
 
-
-### Normal
-
-A reparameterization of `qlnorm()`:
+Definining the normal probability distribution function:
 
 ```{r}
-qnorm2 <- function(x, mu, k, ...) {
-  qnorm(x, mu, k, ...)
-}
+normal <- distribution("norm", function(x, mu, k) dnorm(x, mu, k, log = TRUE), 
+                               function(x, mu, k, ...) qnorm(x, mu, k, ...))
 ```
 
-A reparameterization of `dlnorm()`:
+Defining the log-normal probability distribution function:
 
 ```{r}
-dnorm2 <- add_metadata(function(x, mu, k) dnorm(x, mu, k, log = TRUE),
-                       "norm", qnorm2)
+log_normal <- distribution("lnorm",
+  function(x, mu, k) dlnorm(x, log(mu) - k^2 / 2, k, log = TRUE), 
+  function(x, mu, k, ...) qlnorm(x, log(mu) - k^2 / 2, k, ...))
 ```
 
-
-### Gamma
-
-A reparameterization of `qgamma()`:
+Defining the gamma probability distribution function:
 
 ```{r}
-qgamma2 <- function(x, mu, k, ...) {
-  qgamma(x, k, k / mu, ...)
-}
+gammad <- distribution("gamma", function(x, mu, k) dgamma(x, k, k / mu, log = TRUE), 
+                                function(x, mu, k, ...) qgamma(x, k, k / mu, ...))
 ```
 
-A reparameterization of `dgamma()`:
-
-```{r}
-dgamma2 <- add_metadata(function(x, mu, k) dgamma(x, k, k / mu, log = TRUE),
-                        "gamma", qgamma2)
-```
-
-
-### Log-normal
-
-A reparameterization of `qlnorm()`:
-
-```{r}
-qlnorm2 <- function(x, mu, k, ...) {
-  qlnorm(x, log(mu) - k^2 / 2, k, ...)
-}
-```
-
-A reparameterization of `dlnorm()`:
-
-```{r}
-dlnorm2 <- add_metadata(function(x, mu, k) dlnorm(x, log(mu) - k^2 / 2, k, log = TRUE),
-                        "lnorm", qlnorm2)
-```
 
 
 ## Growth models
@@ -521,7 +491,7 @@ An example using a log-normal distribution:
 ```{r}
 logistic_fit <- od_data |> 
   filter(Sample == "W", Medium == "M9", replicate == 1, time < 15 * 60) |> 
-  logistic_mle(dlnorm2)
+  logistic_mle(log_normal)
 logistic_pred <- logistic_predict(logistic_fit)
 plot_fit(logistic_pred, logistic_fit)
 ```
@@ -545,7 +515,7 @@ Fitting a log-normal likelihood to the replicates from the M9 medium:
 ```{r}
 M9_medium_lnorm <- od_data |> 
   filter(Medium == "M9", time < 15 * 60) |>
-  fit_by_replicate(dlnorm2)
+  fit_by_replicate(log_normal)
 ```
 
 A function that summarizes the fits of an output from `fit_by_replicate()`:
@@ -599,11 +569,11 @@ hl_logistic_and_data <- function(x, f) {
 ```
 
 ```{r}
-logistic_and_data(dset, dlnorm2)
+logistic_and_data(dset, log_normal)
 ```
 
 ```{r}
-logistic_and_data(tail(dset, -10), dlnorm2)
+logistic_and_data(tail(dset, -10), log_normal)
 ```
 
 ```{r}
@@ -611,15 +581,15 @@ dset2 <- filter(dset, between(OD, .1, .8))
 ```
 
 ```{r}
-hl_logistic_and_data(dset2, dlnorm2)
+hl_logistic_and_data(dset2, log_normal)
 ```
 
 ```{r}
-logistic_and_data(dset2, dgamma2)
+logistic_and_data(dset2, gammad)
 ```
 
 ```{r}
-logistic_and_data(dset2, dnorm2)
+logistic_and_data(dset2, normal)
 ```
 
 
@@ -636,7 +606,7 @@ od_data2 <- filter(od_data, between(OD, .1, .8), time < 15 * 60)
 Considering 3 models
 
 ```{r}
-models <- setNames(c(dnorm2, dlnorm2, dgamma2),
+models <- setNames(c(normal, log_normal, gammad),
                    c("norm", "lnorm", "gamma"))
 ```
 
