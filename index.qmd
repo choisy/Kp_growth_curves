@@ -243,7 +243,7 @@ od_data |>
   group_by(Sample, Medium, replicate) |> 
   mutate(Delta_OD = c(NA, diff(OD))) |> 
   ungroup() |> 
-  plot_data(Delta_OD, ylab = "Delta OD600 nm")
+  plot_data(Delta_OD, ylab = bquote( ~ Delta ~ "OD600 nm"))
 ```
 
 
