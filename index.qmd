@@ -13,19 +13,26 @@ editor_options:
 ---
 
 ```{r include = FALSE, eval = FALSE}
+# The code that adds the .nojekyll file to the GitHub repository:
+file <- ".nojekyll"
+file.create(file)
+gert::git_add(file)
+gert::git_commit("Adding the .nojekyll file")
+gert::git_push()
+rm(file)
+```
+
+```{r include = FALSE, eval = FALSE}
 run_all <- function() {
   knitr::purl("index.qmd", "tmp.R", documentation = FALSE)
   source("tmp.R")
   file.remove("tmp.R")  
 }
 
-add_nojekyll <- function() {
-  file <- ".nojekyll"
-  file.create(file)
-  gert::git_add(file)
-  gert::git_commit("Adding the .nojekyll file")
-  gert::git_push()
-  rm(file)
+rerun_all <- function() {
+  rm(list  = grep("run_all", ls(envir = .GlobalEnv), value = TRUE, invert = TRUE),
+     envir = .GlobalEnv)
+  run_all()
 }
 ```
 
@@ -118,10 +125,10 @@ invisible(sapply(required, library, character.only = TRUE))
 
 ## Functions
 
-A tuning of the `bbmle::coef()` function:
+A function that excludes values from a vector `x` by their names `e`:
 
 ```{r}
-coef2 <- function(x) exp(bbmle::coef(x))
+exclude <- function(x, e) x[grep(e, names(x), value = TRUE, invert = TRUE)]
 ```
 
 A tuning of the `plot()` function:
@@ -130,6 +137,18 @@ A tuning of the `plot()` function:
 plot_od <- function(..., ylab = "optical density OD600 nm") {
   plot(..., xlab = "time (hours)", ylab = ylab)
 }
+```
+
+A tuning of the `bbmle::mle2()` function:
+
+```{r}
+mle3 <- function(...) mle2(..., method = "Nelder-Mead", control = list(maxit = 1e4))
+```
+
+A tuning of the `bbmle::coef()` function:
+
+```{r}
+coef2 <- function(x) exp(bbmle::coef(x))
 ```
 
 
@@ -202,10 +221,7 @@ Looking at the number of replicates per combination:
 unique(nb_rep$n)
 ```
 
-
-## Plots
-
-Setting the colors:
+Let's now look at the data. Let's first set some colors:
 
 ```{r}
 col_set <- c(col1, col2)
@@ -249,7 +265,7 @@ od_data |>
 
 ## Probability distributions
 
-A function that build probability distribution functions that package everything we
+A function that builds probability distribution functions that package everything we
 need:
 
 ```{r}
@@ -283,167 +299,118 @@ gammad <- distribution("gamma", function(x, mu, k) dgamma(x, k, k / mu, log = TR
 ```
 
 
-
 ## Growth models
 
-### Logistic
-
-The logistic growth model:
+Defining the exponential growth model:
 
 ```{r}
-logistic <- function(t, K, r, t0) {
+exponential_growth <- function(t, N0, r) {
+  N0 * exp(r * t)
+}
+
+attr(exponential_growth, "name") <- "exponential"
+
+exponential <- list(
+  model = exponential_growth,
+  
+  mLL_factory = function(x, f) {
+    function(N0, r, k) {
+      -sum(f(x$OD, exponential_growth(x$time, exp(N0), exp(r)), exp(k)))
+    }
+  },
+  
+  ini_val = function(df, k = 1) {
+    p <- setNames(c(coef(lm(log(OD) ~ time, df)), k), c("N0", "r", "k"))
+    p[-1] <- log(p[-1])
+    as.list(p)
+  }
+)
+```
+
+Defining the logistic growth model:
+
+```{r}
+logistic_growth <- function(t, K, r, t0) {
   K / (1 + exp(-(t - t0) * r))
 }
-```
 
-The minus log-likelihood function factory:
+attr(logistic_growth, "name") <- "logistic"
 
-```{r}
-logistic_mLL_factory <- function(x, f) {
-  function(K, r, t0, k) {
-    - sum(f(x$OD, logistic(x$time, exp(K), exp(r), exp(t0)), exp(k)))  
+logistic <- list(
+  model = logistic_growth,
+  
+  mLL_factory = function(x, f) {
+    function(K, r, t0, k) {
+      - sum(f(x$OD, logistic_growth(x$time, exp(K), exp(r), exp(t0)), exp(k)))
+    }
+  },
+  
+  ini_val = function(df, k = 1) {
+    time <- df$time
+    OD <- df$OD
+    K <- max(OD)
+    halfK <- K / 2 - min(OD) / 2                    # (second term could be optional)
+    evaluate <- function(x) approx(time, OD, x)$y
+    distance <- function(x) abs(evaluate(x) - halfK)
+    t0 <- optimize(distance, range(time))$minimum
+    r <- df |> 
+      filter(time < t0) |> 
+      mutate(across(OD, log)) |> 
+      lm(OD ~ time, data = _) |> 
+      coef() |> 
+      extract(2) |> 
+      unname()
+    as.list(log(c(K = K, r = r, t0 = t0, k = k)))
   }
-}
+)
 ```
 
-A function that looks for good initial values for the parameters of the logistic growth
-model:
+## Utility functions
+
+A function that fits an exponential growth model by maximum-likelihood to data `x`
+using a probability distribution `f`:
 
 ```{r}
-logistic_ini_val <- function(df, k = 1) {
-  time <- df$time
-  OD <- df$OD
-  K <- max(OD)
-  halfK <- K / 2 - min(OD) / 2                        # (second term could be optional)
-  evaluate <- function(x) approx(time, OD, x)$y
-  distance <- function(x) abs(evaluate(x) - halfK)
-  t0 <- optimize(distance, range(time))$minimum
-  r <- df |> 
-    filter(time < t0) |> 
-    mutate(across(OD, log)) |> 
-    lm(OD ~ time, data = _) |> 
-    coef() |> 
-    extract(2) |> 
-    unname()
-  as.list(log(c(K = K, r = r, t0 = t0, k = k)))
-}
-```
-
-A tuning of the `mle2()` function that includes the automatic initial values of the 
-parameters search and the specification of the density of probability we want to use
-for the minus log-likelihood function:
-
-```{r eval=FALSE, include=FALSE}
-logistic_mle0 <- function(x, f, k = 1, ...) {
-  out <- mle2(logistic_mLL_factory(x, f), logistic_ini_val(x, k), "Nelder-Mead",
-              control = list(maxit = 1e4), ...)
-  out@data <- list(data = x, distribution = f)
+calibrate <- function(x, m, f, start = NULL, k = 1, ...) {
+  if (is.null(start)) start <- m$ini_val(x, k)
+  out <- mle3(m$mLL_factory(x, f), start, ...)
+  out@data <- list(data = x, model = m$model, distribution = f)
   out
 }
 ```
 
+A function that retrieves the probability distribution used from a fitted model:
+
 ```{r}
-logistic_mle <- function(x, f, start = NULL, k = 1, ...) {
-  if (is.null(start)) start <- logistic_ini_val(x, k)
-  out <- mle2(logistic_mLL_factory(x, f), start, "Nelder-Mead",
-              control = list(maxit = 1e4), ...)
-  out@data <- list(data = x, distribution = f)
-  out
-}
+get_distr <- function(x) attr(x@data$distribution, "name")
 ```
 
-A function that performs model predictions:
+A function that retrieves the growth model used from a fitted model:
+
+```{r}
+get_model <- function(x) attr(x@data$model, "name")
+```
+
+A function that retrieves the data from a fitted model:
+
+```{r}
+get_data <- function(x) x@data$data
+```
+
 
 ```{r}
 t_vals <- seq(0, 15 * 60, le = 512)
 
-logistic_predict <- function(x, t = t_vals, ci = .95) {
-  params <- as.list(coef2(x))
+predictions <- function(x, t = t_vals, ci = .95) {
+  params <- coef2(x)
   f <- attr(x@data$distribution, "q")
-  q <- function(mu, lower = FALSE) f((1 - ci) / 2, mu, params$k, lower.tail = lower)
+  q <- function(mu, lower = FALSE) f((1 - ci) / 2, mu, params["k"], lower.tail = lower)
   tibble(time = t,
-         fit = with(params, logistic(t, K, r, t0)),
-         lwr = q(fit, TRUE),
-         upr = q(fit))
+         fit  = do.call(x@data$model, c(t = list(t), exclude(params, "k"))),
+         lwr  = q(fit, TRUE),
+         upr  = q(fit))
 }
 ```
-
-
-### Hard-lag logistic
-
-The logistic growth model:
-
-```{r}
-hl_logistic <- function(t, K, r, t0, l, n) {
-  out <- K / (1 + exp(-(t - t0) * r))
-  out[t < l] <- n
-  out
-}
-```
-
-The minus log-likelihood function factory:
-
-```{r}
-hl_logistic_mLL_factory <- function(x, f) {
-  function(K, r, t0, k, l, n) {
-    - sum(f(x$OD,
-            hl_logistic(x$time, exp(K), exp(r), exp(t0), exp(l), exp(n)), exp(k)))  
-  }
-}
-```
-
-A function that looks for good initial values for the parameters of the logistic growth
-model:
-
-```{r}
-hl_logistic_ini_val <- function(df, k = 1, l = 200, n = .1) {
-  time <- df$time
-  OD <- df$OD
-  K <- max(OD)
-  halfK <- (K - min(OD)) / 2
-  evaluate <- function(x) approx(time, df$OD, x)$y
-  distance <- function(x) abs(evaluate(x) - halfK)
-  t0 <- optimize(distance, range(time))$minimum
-  r <- df |> 
-    filter(between(time, l, t0)) |> 
-    mutate(across(OD, log)) |> 
-    lm(OD ~ time, data = _) |> 
-    coef() |> 
-    extract(2) |> 
-    unname()
-  as.list(log(c(K = K, r = r, t0 = t0, k = k, l = 200, n = .1)))
-}
-```
-
-A tuning of the `mle2()` function that includes the automatic initial values of the 
-parameters search and the specification of the density of probability we want to use
-for the minus log-likelihood function:
-
-```{r}
-hl_logistic_mle <- function(x, f, k = 1, l = 200, n = .1, ...) {
-  out <- mle2(hl_logistic_mLL_factory(x, f), hl_logistic_ini_val(x, k, l, n),
-              "Nelder-Mead", control = list(maxit = 1e4), ...)
-  out@data <- list(data = x, distribution = f)
-  out
-}
-```
-
-A function that performs model predictions:
-
-```{r}
-hl_logistic_predict <- function(x, t = t_vals, ci = .95) {
-  params <- as.list(coef2(x))
-  f <- attr(x@data$distribution, "q")
-  q <- function(mu, lower = FALSE) f((1 - ci) / 2, mu, params$k, lower.tail = lower)
-  tibble(time = t,
-         fit = with(params, hl_logistic(t, K, r, t0, l, n)),
-         lwr = q(fit, TRUE),
-         upr = q(fit))
-}
-```
-
-
-## Individual functions
 
 A function that plots the model's prediction:
 
@@ -456,12 +423,6 @@ plot_predictions <- function(x, col = col1, alpha = .3, add = FALSE, ...) {
     lines(t, fit, col = col, lwd = 2)
   })
 }
-```
-
-A function that retrieves the data from a fitted model:
-
-```{r}
-get_data <- function(x) x@data$data
 ```
 
 A function that adds data points:
@@ -489,307 +450,47 @@ plot_fit <- function(pred, fit, ylim = NULL, col_data = col3, col_model = col1,
 An example using a log-normal distribution:
 
 ```{r}
-logistic_fit <- od_data |> 
-  filter(Sample == "W", Medium == "M9", replicate == 1, time < 15 * 60) |> 
-  logistic_mle(log_normal)
-logistic_pred <- logistic_predict(logistic_fit)
-plot_fit(logistic_pred, logistic_fit)
+#logistic_fit <- od_data |> 
+#  filter(Sample == "W", Medium == "M9", replicate == 1, time < 15 * 60) |> 
+#  logistic_mle(log_normal)
+#logistic_pred <- logistic_predict(logistic_fit)
+#plot_fit(logistic_pred, logistic_fit)
 ```
 
 
-## Batch functions
+## Calibrations
 
-A function that fits a model on all the replicates of a data frame:
+A function that fits models listed in `distr` to the (potentially grouped) data frame
+`df`:
 
 ```{r}
-fit_by_replicate <- function(x, f) {
-  x |> 
-    group_by(Sample, Medium, replicate) |> 
-    group_split() |> 
-    map(logistic_mle, f)
+fit_models <- function(df, distributions, model) {
+  map_dfr(distributions,
+          \(d) df |>
+            group_modify(~ tibble(fitted = list(calibrate(.x, model, d)))) |>
+            ungroup())
 }
 ```
 
-Fitting a log-normal likelihood to the replicates from the M9 medium:
+Let's try it:
 
 ```{r}
-M9_medium_lnorm <- od_data |> 
-  filter(Medium == "M9", time < 15 * 60) |>
-  fit_by_replicate(log_normal)
-```
-
-A function that summarizes the fits of an output from `fit_by_replicate()`:
-
-```{r}
-fits_summary <- function(x) {
-  bind_cols(map_dfr(x, ~ tibble(dist = attr(.x@data$distribution, "name"))),
-            map_dfr(x, ~ unique(select(get_data(.x), -time, -OD))),
-            map_dfr(x, ~ as_tibble_row(coef2(.x))),
-            map_dfr(x, ~ tibble(LL = as.numeric(logLik(.x)))),
-            map_dfr(x, ~ tibble(conv = .x@details$convergence)))
-}
-```
-
-Looking at the summary of the fits on the replicates from M9 medium using a log-normal
-likelihood:
-
-```{r}
-M9_medium_lnorm |>
-  fits_summary() |> 
-  print(n = Inf)
-```
-
-
-## Lags
-
-```{r}
-dset <- filter(od_data, Sample == "W", Medium == "M9", replicate == 1, time < 15 * 60)
+all_fits <- bind_rows(
+              (od_data |>
+                filter(between(OD, .1, .8), time < 15 * 60) |> 
+                group_by(Sample, Medium, replicate) |> 
+                fit_models(c(normal, log_normal, gammad), logistic)),
+              (od_data |>
+                filter(between(OD, .1, .8), time < 15 * 60, Medium == "M9+Fe") |>
+                group_by(Sample, Medium, replicate) |> 
+                fit_models(c(normal, log_normal, gammad), exponential))) |> 
+  mutate(model = map_chr(fitted, get_model),
+         distr = map_chr(fitted, get_distr)) |> 
+  relocate(fitted, .after = last_col())
 ```
 
 ```{r}
-plot_fit_and_data <- function(fit, ...) {
-  plot_fit(logistic_predict(fit), fit, ...)
-}
+all_fits
 ```
 
-```{r}
-logistic_and_data <- function(x, f) {
-  fit <- logistic_mle(x, f)
-  plot_fit_and_data(fit)
-  logLik(fit)
-}
-```
-
-```{r}
-hl_logistic_and_data <- function(x, f) {
-  fit <- hl_logistic_mle(x, f)
-  plot_fit(hl_logistic_predict(fit, t_vals), fit)
-  logLik(fit)
-}
-```
-
-```{r}
-logistic_and_data(dset, log_normal)
-```
-
-```{r}
-logistic_and_data(tail(dset, -10), log_normal)
-```
-
-```{r}
-dset2 <- filter(dset, between(OD, .1, .8))
-```
-
-```{r}
-hl_logistic_and_data(dset2, log_normal)
-```
-
-```{r}
-logistic_and_data(dset2, gammad)
-```
-
-```{r}
-logistic_and_data(dset2, normal)
-```
-
-
-## Batches
-
-### Best models
-
-Working on the data that are presumed to be in the linear domain:
-
-```{r}
-od_data2 <- filter(od_data, between(OD, .1, .8), time < 15 * 60)
-```
-
-Considering 3 models
-
-```{r}
-models <- setNames(c(normal, log_normal, gammad),
-                   c("norm", "lnorm", "gamma"))
-```
-
-Fitting 3 models to each of the replicates:
-
-```{r eval = FALSE}
-all_fits <- map(models, ~ fit_by_replicate(od_data2, .x))
-```
-
-```{r include = FALSE}
-if (file_exists("all_fits.rds")) {
-  all_fits <- readRDScache("all_fits.rds")
-} else {
-  all_fits <- map(models, ~ fit_by_replicate(od_data2, .x))
-  saveRDScache(all_fits, "all_fits.rds")
-}
-```
-
-The summaries of the fits:
-
-```{r}
-all_fits_summary <- map(all_fits, fits_summary)
-```
-
-Checking convergence:
-
-```{r}
-all_fits_summary |> 
-  bind_rows() |> 
-  pull(conv) |> 
-  is_greater_than(0) |> 
-  any()
-```
-
-A table for comparing models' likelihoods:
-
-```{r}
-models_names <- names(models)
-
-models_comparisons <- all_fits_summary |>
-  map(~ select(.x, Sample, Medium, replicate, LL)) |> 
-  map2(paste0("_", models_names), ~ rename_with(.x, \(x) paste0(x, .y), LL)) |> 
-  reduce(left_join, by = c("Sample", "Medium", "replicate")) |> 
-  rowwise() |> 
-  mutate(best_model = models_names[which.max(c(LL_norm, LL_lnorm, LL_gamma))]) |> 
-  ungroup()
-```
-
-Comparing likelihoods:
-
-```{r}
-models_comparisons |> 
-  group_by(best_model) |> 
-  tally()
-```
-
-Checking these 2 log-normal models:
-
-```{r}
-filter(models_comparisons, best_model == "lnorm")
-```
-
-A function that selects the best models from a list of models options:
-
-```{r}
-select_best_models <- function(fits, best) {
-  table_best <- table(best)
-  if (length(table_best) > 1) {
-    models <- names(sort(table_best))
-    out <- fits[[last(models)]]
-    for (model in head(models, -1)) {
-      sel <- which(best == model)
-      out[sel] <- all_fits[[model]][sel]
-    }
-    return(out)
-  }
-  fits
-}
-```
-
-Selecting the best models for each replicate:
-
-```{r}
-best_models <- select_best_models(all_fits, models_comparisons$best_model)
-```
-
-Their fit summaries:
-
-```{r}
-best_models_summary <- fits_summary(best_models)
-```
-
-Which gives:
-
-```{r}
-print(best_models_summary, n = Inf)
-```
-
-### Diagnostics
-
-```{r}
-plot_replicates <- function(bm, rep, colA = col1, colB = col2) {
-  medium1 <- bm[[rep]]
-  medium2 <- bm[[rep + 6]]
-  xlim <- c(min(c(get_data(medium1)$time, get_data(medium2)$time)) / 60, 15)
-  plot_fit_and_data(medium1, col_data = colA, col_model = colA,
-                    xlim = xlim, ylim = c(0, .8))
-  plot_fit_and_data(medium2, col_data = colB, col_model = colB, add = TRUE)
-}
-```
-
-```{r}
-plot_strain <- function(strain) {
-  opar <- par(mfrow = 2:3, plt = c(.12, .97, .17, .95))
-  for (i in 1:6) plot_replicates(strain, i)
-  par(opar)
-}
-```
-
-```{r fig.width = 8.3, fig.height =  8.3 * (5 / 7) * (2 / 3)}
-seq(1, length(best_models), 12) |> 
-  map(~ extract(best_models, .x:(.x + 11))) |> 
-  walk(plot_strain)
-```
-
-A function that computes a model's prediction at the observed data points:
-
-```{r}
-observations_predictions <- function(fitted_model) {
-  the_data <- get_data(fitted_model)
-  left_join(the_data, logistic_predict(fitted_model, the_data$time), "time")
-}
-```
-
-Let's look at the relationship between model prediction and measured values:
-
-```{r fig.height = 5, fig.width = 5}
-best_models |> 
-  map(observations_predictions) |> 
-  bind_rows() |> 
-  with(plot(OD, fit, col = col1, xlim = 0:1, ylim = 0:1, asp = 1,
-            xlab = "measured OD", ylab = "predicted OD"))
-
-abline(0, 1, lwd = 2, col = col3)
-```
-
-### Estimates
-
-```{r}
-best_models_summary
-```
-
-```{r}
-confint(best_models[[1]])
-```
-
-```{r eval = FALSE}
-a <- map(best_models, confint)
-```
-
-```{r include = FALSE}
-if (file_exists("a.rds")) {
-  a <- readRDScache("a.rds")
-} else {
-  a <- map(best_models, confint)
-  saveRDScache(a, "a.rds")
-}
-```
-
-```{r}
-class(a[[1]])
-class(a[[9]])
-```
-
-```{r}
-sel <- which(! map_lgl(a, is.matrix))
-map(a[sel], coef)
-#a2 <- map(a[sel], confint)
-#best_models
-```
-
-```{r}
-bm9 <- confint(best_models[[9]])
-coef(bm9)
-```
 
