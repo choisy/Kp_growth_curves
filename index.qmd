@@ -151,6 +151,12 @@ A tuning of the `bbmle::coef()` function:
 coef2 <- function(x) exp(bbmle::coef(x))
 ```
 
+A tuning of the `bbmle::confint()` function:
+
+```{r}
+confint2 <- function(x) exp(bbmle::confint(x))
+```
+
 
 ## Data
 
@@ -509,9 +515,137 @@ if (file_exists("all_fits.rds")) {
 }
 ```
 
+which gives:
 
 ```{r}
 all_fits
 ```
+
+Let's check for convergence:
+
+```{r}
+all_fits |> 
+  mutate(converged = map_int(fitted, ~ .x@details$convergence)) |> 
+  pull(converged) |> 
+  is_greater_than(0) |> 
+  any()
+```
+
+A substantially better fit with the normal distribution:
+
+```{r}
+all_fits |> 
+  mutate(LL = map_dbl(fitted, logLik)) |> 
+  group_by(distr) |> 
+  summarise(LL = sum(LL))
+```
+
+Same thing for the `M9+Fe` medium that additionally shows a substantially better fit
+with the logistic model:
+
+```{r}
+all_fits |> 
+  filter(Medium == "M9+Fe") |> 
+  mutate(LL = map_dbl(fitted, logLik)) |> 
+  group_by(model, distr) |> 
+  summarise(LL = sum(LL), .groups = "drop")
+```
+
+Let's now compute the confidence intervals if the parameters (takes 1'30")
+
+```{r eval = FALSE}
+CI_vals <- all_fits |> 
+  filter(model == "logistic", distr == "norm") |> 
+  mutate(CI = map(fitted, confint))
+```
+
+```{r include = FALSE}
+if (file_exists("CI_vals.rds")) {
+  CI_vals <- readRDScache("CI_vals.rds")
+} else {
+  CI_vals <- all_fits |> 
+    filter(model == "logistic", distr == "norm") |> 
+    mutate(CI = map(fitted, confint))
+  saveRDScache(CI_vals, "CI_vals.rds")
+}
+```
+
+Let's look at the models showing difficulties computing the confidence intervals:
+
+```{r}
+(CI_issues <- filter(CI_vals, ! map_lgl(CI, is.matrix)))
+```
+
+There are all from the `M9+Fe` medium, which suggests that, for these models, the
+exponential growth might actually be a better fit. Let's first compute the likelihood
+ratio tests:
+
+```{r}
+p_vals <- all_fits |> 
+  filter(Medium == "M9+Fe", distr == "norm") |> 
+  select(-Medium, -distr) |> 
+  group_by(model) |> 
+  group_split() |> 
+  map2(c("_expo", "_logi"), ~ rename_with(.x, \(x) paste0(x, .y), fitted)) |> 
+  map(~ select(.x, -model)) |> 
+  reduce(left_join, c("Sample", "replicate")) |> 
+  mutate(LRTp = map2_dbl(fitted_expo, fitted_logi, ~ anova(.x, .y)[2, 5])) |> 
+  select(-fitted_expo, -fitted_logi)
+```
+
+Let's look at the p-values of these tests for the model where the computation of the
+confidence intervals failed:
+
+```{r}
+CI_issues |> 
+  select(Sample, replicate) |> 
+  left_join(p_vals, c("Sample", "replicate"))
+```
+
+Not sure what is going on with replicate 5 of WVE:
+
+```{r plot_WVE_5}
+od_data |> 
+  filter(between(OD, .1, .8), time < 15 * 60,
+         Medium == "M9+Fe", Sample == "WVE", replicate == 5) |> 
+  with(plot_od(time, OD, col = col3, pch = 19))
+```
+
+Let's check whether the exponential model does fix the issue as expected:
+
+```{r eval = FALSE}
+CI_with_exponential <- all_fits |> 
+  filter(Medium == "M9+Fe", model == "exponential", distr == "norm") |> 
+  semi_join(CI_issues, c("Sample", "replicate")) |> 
+  mutate(CI = map(fitted, confint))
+```
+
+```{r include = FALSE}
+if (file_exists("CI_with_exponential.rds")) {
+  CI_with_exponential <- readRDScache("CI_with_exponential.rds")
+} else {
+  CI_with_exponential <- all_fits |> 
+    filter(Medium == "M9+Fe", model == "exponential", distr == "norm") |> 
+    semi_join(CI_issues, c("Sample", "replicate")) |> 
+    mutate(CI = map(fitted, confint))
+  saveRDScache(CI_with_exponential, "CI_with_exponential.rds")
+}
+```
+
+which gives:
+
+```{r}
+CI_with_exponential
+```
+
+Replacing the issues encountered with the logistic models with exponential models:
+
+```{r}
+(CI_vals2 <- CI_vals |> 
+  anti_join(CI_issues, c("Sample", "Medium", "replicate")) |> 
+  bind_rows(CI_with_exponential) |> 
+  arrange(Sample, Medium, replicate))
+```
+
 
 
