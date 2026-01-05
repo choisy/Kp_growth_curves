@@ -336,11 +336,66 @@ exponential <- list(
 Defining the logistic growth model:
 
 ```{r}
+#logistic_growth <- function(t, K, r, t0) {
+#  K / (1 + exp(-(t - t0) * r))
+#}
+#
+#attr(logistic_growth, "name") <- "logistic"
+#
+#logistic <- list(
+#  model = logistic_growth,
+#  
+#  mLL_factory = function(x, f) {
+#    function(K, r, t0, k) {
+#      - sum(f(x$OD, logistic_growth(x$time, exp(K), exp(r), exp(t0)), exp(k)))
+#    }
+#  },
+#
+#  ini_val = function(df, k = 1) {
+#    time <- df$time
+#    OD <- df$OD
+#    K <- max(OD)
+#    halfK <- K / 2 - min(OD) / 2                    # (second term could be optional)
+#    evaluate <- function(x) approx(time, OD, x)$y
+#    distance <- function(x) abs(evaluate(x) - halfK)
+#    t0 <- optimize(distance, range(time))$minimum
+#    r <- df |> 
+#      filter(time < t0) |> 
+#      mutate(across(OD, log)) |> 
+#      lm(OD ~ time, data = _) |> 
+#      coef() |> 
+#      extract(2) |> 
+#      unname()
+#    as.list(log(c(K = K, r = r, t0 = t0, k = k)))
+#  }
+#)
+```
+
+
+```{r}
 logistic_growth <- function(t, K, r, t0) {
   K / (1 + exp(-(t - t0) * r))
 }
 
 attr(logistic_growth, "name") <- "logistic"
+
+ini_val_logistic = function(df, k = 1) {
+  time <- df$time
+  OD <- df$OD
+  K <- max(OD)
+  halfK <- K / 2 - min(OD) / 2                    # (second term could be optional)
+  evaluate <- function(x) approx(time, OD, x)$y
+  distance <- function(x) abs(evaluate(x) - halfK)
+  t0 <- optimize(distance, range(time))$minimum
+  r <- df |> 
+    filter(time < t0) |> 
+    mutate(across(OD, log)) |> 
+    lm(OD ~ time, data = _) |> 
+    coef() |> 
+    extract(2) |> 
+    unname()
+  tibble(K = K, r = r, t0 = t0, k = k)
+}
 
 logistic <- list(
   model = logistic_growth,
@@ -352,24 +407,18 @@ logistic <- list(
   },
   
   ini_val = function(df, k = 1) {
-    time <- df$time
-    OD <- df$OD
-    K <- max(OD)
-    halfK <- K / 2 - min(OD) / 2                    # (second term could be optional)
-    evaluate <- function(x) approx(time, OD, x)$y
-    distance <- function(x) abs(evaluate(x) - halfK)
-    t0 <- optimize(distance, range(time))$minimum
-    r <- df |> 
-      filter(time < t0) |> 
-      mutate(across(OD, log)) |> 
-      lm(OD ~ time, data = _) |> 
-      coef() |> 
-      extract(2) |> 
-      unname()
-    as.list(log(c(K = K, r = r, t0 = t0, k = k)))
+    df |> 
+      group_by(replicate) |> 
+      group_modify(~ ini_val_logistic(.x, k)) |> 
+      ungroup() |> 
+      select(-starts_with("replicate")) |> 
+      colMeans() |> 
+      log() |> 
+      as.list()
   }
 )
 ```
+
 
 ## Utility functions
 
@@ -484,8 +533,10 @@ Let's try it (takes 20"):
 all_fits <- bind_rows(
               (od_data |>
                 filter(between(OD, .1, .8), time < 15 * 60) |> 
-                group_by(Sample, Medium, replicate) |> 
-                fit_models(c(normal, log_normal, gammad), logistic)),
+                mutate(replicate2 = replicate) |> ## to protect replicate from group_by
+                group_by(Sample, Medium, replicate2) |> 
+                fit_models(c(normal, log_normal, gammad), logistic) |> 
+                rename(replicate = replicate2)),
               (od_data |>
                 filter(between(OD, .1, .8), time < 15 * 60, Medium == "M9+Fe") |>
                 group_by(Sample, Medium, replicate) |> 
@@ -502,8 +553,10 @@ if (file_exists("all_fits.rds")) {
   all_fits <- bind_rows(
                 (od_data |>
                   filter(between(OD, .1, .8), time < 15 * 60) |> 
-                  group_by(Sample, Medium, replicate) |> 
-                  fit_models(c(normal, log_normal, gammad), logistic)),
+                  mutate(replicate2 = replicate) |> ## to protect replicate from group_by
+                  group_by(Sample, Medium, replicate2) |> 
+                  fit_models(c(normal, log_normal, gammad), logistic) |> 
+                  rename(replicate = replicate2)),
                 (od_data |>
                   filter(between(OD, .1, .8), time < 15 * 60, Medium == "M9+Fe") |>
                   group_by(Sample, Medium, replicate) |> 
@@ -612,7 +665,7 @@ od_data |>
 ```
 
 Let's check whether the exponential model does fix the issue as expected:
-
+  
 ```{r eval = FALSE}
 CI_with_exponential <- all_fits |> 
   filter(Medium == "M9+Fe", model == "exponential", distr == "norm") |> 
@@ -633,18 +686,18 @@ if (file_exists("CI_with_exponential.rds")) {
 ```
 
 which gives:
-
+  
 ```{r}
 CI_with_exponential
 ```
 
 Replacing the issues encountered with the logistic models with exponential models:
-
+  
 ```{r}
 (CI_vals2 <- CI_vals |> 
-  anti_join(CI_issues, c("Sample", "Medium", "replicate")) |> 
-  bind_rows(CI_with_exponential) |> 
-  arrange(Sample, Medium, replicate))
+    anti_join(CI_issues, c("Sample", "Medium", "replicate")) |> 
+    bind_rows(CI_with_exponential) |> 
+    arrange(Sample, Medium, replicate))
 ```
 
 
