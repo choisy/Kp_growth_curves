@@ -472,9 +472,9 @@ fit_models <- function(df, distributions, model) {
 }
 ```
 
-Let's try it:
+Let's try it (takes 20"):
 
-```{r}
+```{r eval = FALSE}
 all_fits <- bind_rows(
               (od_data |>
                 filter(between(OD, .1, .8), time < 15 * 60) |> 
@@ -488,6 +488,27 @@ all_fits <- bind_rows(
          distr = map_chr(fitted, get_distr)) |> 
   relocate(fitted, .after = last_col())
 ```
+
+```{r include = FALSE}
+if (file_exists("all_fits.rds")) {
+  all_fits <- readRDScache("all_fits.rds")
+} else {
+  all_fits <- bind_rows(
+                (od_data |>
+                  filter(between(OD, .1, .8), time < 15 * 60) |> 
+                  group_by(Sample, Medium, replicate) |> 
+                  fit_models(c(normal, log_normal, gammad), logistic)),
+                (od_data |>
+                  filter(between(OD, .1, .8), time < 15 * 60, Medium == "M9+Fe") |>
+                  group_by(Sample, Medium, replicate) |> 
+                  fit_models(c(normal, log_normal, gammad), exponential))) |> 
+    mutate(model = map_chr(fitted, get_model),
+           distr = map_chr(fitted, get_distr)) |> 
+    relocate(fitted, .after = last_col())
+  saveRDScache(all_fits, "all_fits.rds")
+}
+```
+
 
 ```{r}
 all_fits
