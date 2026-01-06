@@ -502,15 +502,15 @@ plot_fit <- function(pred, fit, ylim = NULL, col_data = col3, col_model = col1,
 }
 ```
 
-An example using a log-normal distribution:
+A wrapper:
 
 ```{r}
-#logistic_fit <- od_data |> 
-#  filter(Sample == "W", Medium == "M9", replicate == 1, time < 15 * 60) |> 
-#  logistic_mle(log_normal)
-#logistic_pred <- logistic_predict(logistic_fit)
-#plot_fit(logistic_pred, logistic_fit)
+plot_fit_and_data <- function(fit, ...) {
+  plot_fit(predictions(fit), fit, ...)
+}
 ```
+
+
 
 
 ## Calibrations
@@ -703,68 +703,6 @@ Replacing the issues encountered with the logistic models with exponential model
 
 ## Diagnostics
 
-A function that plots the model's prediction:
-
-```{r}
-plot_predictions <- function(x, col = col1, alpha = .3, add = FALSE, ...) {
-  with(x, {
-    t <- time / 60
-    if (! add) plot_od(t, fit, type = "n", ...)
-    polygon(c(t, rev(t)), c(lwr, rev(upr)), border = NA, col = adjustcolor(col, alpha))
-    lines(t, fit, col = col, lwd = 2)
-  })
-}
-```
-
-Let's try it:
-
-```{r plot_model_predictions}
-CI_vals2 |> 
-  pull(fitted) |> 
-  extract2(1) |> 
-  predictions() |> 
-  plot_predictions()
-```
-
-A function that adds data points:
-
-```{r}
-add_data <- function(x, col = col3) {
-  with(get_data(x), points(time / 60, OD, col = col, pch = 19))
-}
-```
-
-Let's combine them:
-
-```{r}
-plot_fit <- function(pred, fit, ylim = NULL, col_data = col3, col_model = col1,
-                     alpha = .3, ...) {
-  if (is.null(ylim)) {
-    OD <- get_data(fit)$OD
-    ylim <- c(min(c(pred$lwr, OD)), max(c(pred$upr, OD)))
-  }
-  plot_predictions(pred, col_model, alpha, ylim = ylim, ...)
-  add_data(fit, col = col_data)
-}
-```
-
-A wrapper:
-
-```{r}
-plot_fit_and_data <- function(fit, ...) {
-  plot_fit(predictions(fit), fit, ...)
-}
-```
-
-Let's try it:
-
-```{r plot_prediction_with_data}
-CI_vals2 |> 
-  pull(fitted) |> 
-  extract2(1) |> 
-  plot_fit_and_data()
-```
-
 ```{r}
 plot_replicates <- function(bm, rep, colA = col1, colB = col2) {
   medium1 <- bm[[rep]]
@@ -776,15 +714,6 @@ plot_replicates <- function(bm, rep, colA = col1, colB = col2) {
 }
 ```
 
-Let's try it:
-
-```{r plot_1_replicate_2_media}
-CI_vals2 |> 
-  filter(Sample == "W") |> 
-  arrange(Medium, replicate) |> 
-  pull(fitted) |> 
-  plot_replicates(1)
-```
 
 ```{r}
 plot_strain <- function(strain) {
@@ -826,7 +755,27 @@ abline(0, 1, lwd = 2, col = col3)
 ```
 
 
+## Comparisons
 
+```{r}
+CI_vals2 |> 
+  select(Sample, Medium) |> 
+  unique()
+```
+
+```{r}
+CI_vals2
+```
+
+```{r}
+od_data |> 
+  filter(Sample == "W", Medium == "M9") |> 
+  filter(between(OD, .1, .8), time < 15 * 60) |> 
+#  mutate(replicate2 = replicate) |>              ## to protect replicate from group_by
+  group_by(Sample, Medium) |> 
+  fit_models(c(normal, log_normal, gammad), logistic)
+#  rename(replicate = replicate2)
+```
 
 
 
