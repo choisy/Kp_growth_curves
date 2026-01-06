@@ -701,4 +701,143 @@ Replacing the issues encountered with the logistic models with exponential model
 ```
 
 
+## Diagnostics
+
+A function that plots the model's prediction:
+
+```{r}
+plot_predictions <- function(x, col = col1, alpha = .3, add = FALSE, ...) {
+  with(x, {
+    t <- time / 60
+    if (! add) plot_od(t, fit, type = "n", ...)
+    polygon(c(t, rev(t)), c(lwr, rev(upr)), border = NA, col = adjustcolor(col, alpha))
+    lines(t, fit, col = col, lwd = 2)
+  })
+}
+```
+
+Let's try it:
+
+```{r plot_model_predictions}
+CI_vals2 |> 
+  pull(fitted) |> 
+  extract2(1) |> 
+  predictions() |> 
+  plot_predictions()
+```
+
+A function that adds data points:
+
+```{r}
+add_data <- function(x, col = col3) {
+  with(get_data(x), points(time / 60, OD, col = col, pch = 19))
+}
+```
+
+Let's combine them:
+
+```{r}
+plot_fit <- function(pred, fit, ylim = NULL, col_data = col3, col_model = col1,
+                     alpha = .3, ...) {
+  if (is.null(ylim)) {
+    OD <- get_data(fit)$OD
+    ylim <- c(min(c(pred$lwr, OD)), max(c(pred$upr, OD)))
+  }
+  plot_predictions(pred, col_model, alpha, ylim = ylim, ...)
+  add_data(fit, col = col_data)
+}
+```
+
+A wrapper:
+
+```{r}
+plot_fit_and_data <- function(fit, ...) {
+  plot_fit(predictions(fit), fit, ...)
+}
+```
+
+Let's try it:
+
+```{r plot_prediction_with_data}
+CI_vals2 |> 
+  pull(fitted) |> 
+  extract2(1) |> 
+  plot_fit_and_data()
+```
+
+```{r}
+plot_replicates <- function(bm, rep, colA = col1, colB = col2) {
+  medium1 <- bm[[rep]]
+  medium2 <- bm[[rep + 6]]
+  xlim <- c(min(c(get_data(medium1)$time, get_data(medium2)$time)) / 60, 15)
+  plot_fit_and_data(medium1, col_data = colA, col_model = colA,
+                    xlim = xlim, ylim = c(0, .8))
+  plot_fit_and_data(medium2, col_data = colB, col_model = colB, add = TRUE)
+}
+```
+
+Let's try it:
+
+```{r plot_1_replicate_2_media}
+CI_vals2 |> 
+  filter(Sample == "W") |> 
+  arrange(Medium, replicate) |> 
+  pull(fitted) |> 
+  plot_replicates(1)
+```
+
+```{r}
+plot_strain <- function(strain) {
+  opar <- par(mfrow = 2:3, plt = c(.12, .97, .17, .95))
+  for (i in 1:6) plot_replicates(strain, i)
+  par(opar)
+}
+```
+
+```{r plot_all_samples, fig.width = 8.3, fig.height =  8.3 * (5 / 7) * (2 / 3)}
+best_models <- CI_vals2 |> 
+  arrange(Sample, Medium, replicate) |> 
+  pull(fitted)
+
+seq(1, length(best_models), 12) |> 
+  map(~ extract(best_models, .x:(.x + 11))) |> 
+  walk(plot_strain)
+```
+
+A function that computes a model's prediction at the observed data points:
+
+```{r}
+observations_predictions <- function(fitted_model) {
+  the_data <- get_data(fitted_model)
+  left_join(the_data, predictions(fitted_model, the_data$time), "time")
+}
+```
+
+Let's look at the relationship between model prediction and measured values:
+
+```{r plot_measured_vs_predictied, fig.height = 5, fig.width = 5}
+best_models |> 
+  map(observations_predictions) |> 
+  bind_rows() |> 
+  with(plot(OD, fit, col = col1, xlim = 0:1, ylim = 0:1, asp = 1,
+            xlab = "measured OD", ylab = "predicted OD"))
+
+abline(0, 1, lwd = 2, col = col3)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
