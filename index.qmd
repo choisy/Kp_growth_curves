@@ -336,43 +336,6 @@ exponential <- list(
 Defining the logistic growth model:
 
 ```{r}
-#logistic_growth <- function(t, K, r, t0) {
-#  K / (1 + exp(-(t - t0) * r))
-#}
-#
-#attr(logistic_growth, "name") <- "logistic"
-#
-#logistic <- list(
-#  model = logistic_growth,
-#  
-#  mLL_factory = function(x, f) {
-#    function(K, r, t0, k) {
-#      - sum(f(x$OD, logistic_growth(x$time, exp(K), exp(r), exp(t0)), exp(k)))
-#    }
-#  },
-#
-#  ini_val = function(df, k = 1) {
-#    time <- df$time
-#    OD <- df$OD
-#    K <- max(OD)
-#    halfK <- K / 2 - min(OD) / 2                    # (second term could be optional)
-#    evaluate <- function(x) approx(time, OD, x)$y
-#    distance <- function(x) abs(evaluate(x) - halfK)
-#    t0 <- optimize(distance, range(time))$minimum
-#    r <- df |> 
-#      filter(time < t0) |> 
-#      mutate(across(OD, log)) |> 
-#      lm(OD ~ time, data = _) |> 
-#      coef() |> 
-#      extract(2) |> 
-#      unname()
-#    as.list(log(c(K = K, r = r, t0 = t0, k = k)))
-#  }
-#)
-```
-
-
-```{r}
 logistic_growth <- function(t, K, r, t0) {
   K / (1 + exp(-(t - t0) * r))
 }
@@ -758,35 +721,72 @@ abline(0, 1, lwd = 2, col = col3)
 ## Comparisons
 
 ```{r}
-CI_vals2 |> 
-  select(Sample, Medium) |> 
-  unique()
-```
-
-```{r}
-CI_vals2
-```
-
-```{r}
-od_data |> 
-  filter(Sample == "W", Medium == "M9") |> 
+sample_medium <- od_data |> 
   filter(between(OD, .1, .8), time < 15 * 60) |> 
-#  mutate(replicate2 = replicate) |>              ## to protect replicate from group_by
   group_by(Sample, Medium) |> 
-  fit_models(c(normal, log_normal, gammad), logistic)
-#  rename(replicate = replicate2)
+  group_modify(~ tibble(fitted = list(calibrate(.x, logistic, normal))))
 ```
 
+```{r}
+sample_medium |> 
+  mutate(converged = map_int(fitted, ~ .x@details$convergence)) |> 
+  pull(converged) |> 
+  is_greater_than(0) |> 
+  any()
+```
 
+```{r}
+f <- function(x, i) {
+  pnames <- c("K", "r")
+  bnames <- c("_lwr", "_upr")
+  setNames(x[pnames, i], paste0(pnames, bnames[i]))
+}
+```
 
+```{r eval = FALSE}
+sample_medium_ci <- sample_medium |> 
+  mutate(coef  = map(fitted, coef2),
+         CI    = map(fitted, confint2),
+         lower = map(CI, f, 1),
+         upper = map(CI, f, 2)) |> 
+  unnest_wider(coef) |> 
+  unnest_wider(lower) |> 
+  unnest_wider(upper) |> 
+  select(-t0, -k)
+```
 
+```{r include = FALSE}
+if (file_exists("sample_medium_ci.rds")) {
+  sample_medium_ci <- readRDScache("sample_medium_ci.rds")
+} else {
+  sample_medium_ci <- sample_medium |> 
+    mutate(coef  = map(fitted, coef2),
+           CI    = map(fitted, confint2),
+           lower = map(CI, f, 1),
+           upper = map(CI, f, 2)) |> 
+    unnest_wider(coef) |> 
+    unnest_wider(lower) |> 
+    unnest_wider(upper) |> 
+    select(-t0, -k)
+  saveRDScache(sample_medium_ci, "sample_medium_ci.rds")
+}
+```
 
+```{r plot_comparisons_r}
+strains <- unique(sample_medium_ci$Sample)
+x1 <- setNames(seq_along(strains), strains)
+media <- unique(sample_medium_ci$Medium)
+x2 <- setNames((seq_along(media) - 1.5) / 4, media)
+cols <- setNames(c(col1, col2), media)
 
-
-
-
-
-
-
-
+with(sample_medium_ci, {
+  plot(x1[Sample] + x2[Medium], r, col = cols[Medium], pch = 19,
+       ylim = range(c(r_lwr, r_upr)),
+       xlab = NA, ylab = "max growth rate", axes = FALSE)
+  axis(1, x1, strains)
+  axis(2)
+  arrows(x1[Sample] + x2[Medium], r_lwr, x1[Sample] + x2[Medium], r_upr, .05, 90, 3,
+         col = cols[Medium], lwd = 2)
+})
+```
 
